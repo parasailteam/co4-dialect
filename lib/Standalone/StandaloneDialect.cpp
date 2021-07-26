@@ -10,7 +10,7 @@
 #include "Standalone/StandaloneOps.h"
 
 using namespace mlir;
-using namespace mlir::standalone;
+using namespace mlir::co4ll;
 
 //===----------------------------------------------------------------------===//
 // Standalone dialect.
