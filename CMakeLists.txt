@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.13.4)
 
-project(standalone-dialect LANGUAGES CXX C)
+project(co4-dialect LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 14 CACHE STRING "C++ standard to conform to")
 
@@ -34,4 +34,4 @@ include(sanitizers)
 add_subdirectory(include)
 add_subdirectory(lib)
 add_subdirectory(test)
-add_subdirectory(standalone-opt)
+add_subdirectory(co4-opt)
