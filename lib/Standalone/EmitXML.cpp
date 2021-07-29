@@ -37,12 +37,13 @@ struct StepEmitter {
 
 static std::tuple<int, int> getDstBufferAndOffset(const Value v) {
   if (const OpResult o = v.dyn_cast<OpResult>()) {
-    IntegerAttr db = o.getOwner()->getAttrOfType<IntegerAttr>("dstbuf");
-    assert(db && "dstbuf attr missing");
-    int dstbuf = db.getInt();
+    IntegerAttr dstbufAttr = o.getOwner()->getAttrOfType<IntegerAttr>("dstbuf");
+    assert(dstbufAttr && "dstbuf attr missing");
+    int dstbuf = dstbufAttr.getInt();
 
-    // TODO: handle variable destination offset
-    int dstoff = 0;
+    IntegerAttr dstoffAttr = o.getOwner()->getAttrOfType<IntegerAttr>("dstoff");
+    assert(dstoffAttr && "dstoff attr missing");
+    int dstoff = dstoffAttr.getInt();
 
     return std::make_tuple(dstbuf, dstoff);
   } else if (const BlockArgument arg = v.dyn_cast<BlockArgument>()) {
@@ -73,8 +74,9 @@ void StepEmitter::emitOp(Operation *inst, StringRef type, unsigned numSources) {
   llvm::errs() << "dstbuf=\"" << "a" << dstbuf << "\" "
                << "dstoff=\"" << dstoff << "\" ";
 
-  // TODO: handle variable chunk size
-  llvm::errs() << "cnt=\"" << 1 << "\" ";
+  IntegerAttr cnt = inst->getAttrOfType<IntegerAttr>("cnt");
+  assert(cnt && "cnt attr missing");
+  llvm::errs() << "cnt=\"" << cnt.getInt() << "\" ";
 
   // TODO: handle dependencies
   llvm::errs() << "depid=\"" << -1 << "\" ";
