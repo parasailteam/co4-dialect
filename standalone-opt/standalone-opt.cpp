@@ -22,9 +22,12 @@
 #include "Standalone/StandaloneDialect.h"
 #include "Standalone/StandaloneOpsDialect.cpp.inc"
 
+#include "Standalone/EmitXML.h"
+
 int main(int argc, char **argv) {
   mlir::registerAllPasses();
-  // TODO: Register standalone passes here.
+
+  registerEmitXMLPass();
 
   mlir::DialectRegistry registry;
   registry.insert<mlir::co4ll::StandaloneDialect>();
