@@ -19,10 +19,10 @@
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
 
-#include "Standalone/StandaloneDialect.h"
-#include "Standalone/StandaloneOpsDialect.cpp.inc"
+#include "Co4LL/Co4LLDialect.h"
+#include "Co4LL/Co4LLOpsDialect.cpp.inc"
 
-#include "Standalone/EmitXML.h"
+#include "Co4LL/EmitXML.h"
 
 int main(int argc, char **argv) {
   mlir::registerAllPasses();
@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
   registerEmitXMLPass();
 
   mlir::DialectRegistry registry;
-  registry.insert<mlir::co4ll::StandaloneDialect>();
+  registry.insert<mlir::co4ll::Co4LLDialect>();
   registry.insert<mlir::StandardOpsDialect>();
   registry.insert<mlir::math::MathDialect>();
   // Add the following to include *all* MLIR Core dialects, or selectively
@@ -39,5 +39,5 @@ int main(int argc, char **argv) {
   // registerAllDialects(registry);
 
   return mlir::asMainReturnCode(
-      mlir::MlirOptMain(argc, argv, "Standalone optimizer driver\n", registry));
+      mlir::MlirOptMain(argc, argv, "Co4 optimizer driver\n", registry));
 }

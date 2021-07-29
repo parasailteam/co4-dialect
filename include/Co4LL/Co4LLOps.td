@@ -1,4 +1,4 @@
-//===- StandaloneOps.td - Standalone dialect ops -----------*- tablegen -*-===//
+//===- Co4LLOps.td - Co4 Low-Level Dialect Ops -------------*- tablegen -*-===//
 //
 // This file is licensed under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,13 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef STANDALONE_OPS
-#define STANDALONE_OPS
+#ifndef CO4LL_OPS
+#define CO4LL_OPS
 
-include "StandaloneDialect.td"
+include "Co4LLDialect.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
-def Standalone_FooOp : Standalone_Op<"foo", [NoSideEffect,
+def Co4LL_FooOp : Co4LL_Op<"foo", [NoSideEffect,
                                              SameOperandsAndResultType]> {
     let summary = "Illustrates how to define an operation.";
     let description = [{
@@ -39,4 +39,4 @@ def Standalone_FooOp : Standalone_Op<"foo", [NoSideEffect,
     }];
 }
 
-#endif // STANDALONE_OPS
+#endif // CO4LL_OPS

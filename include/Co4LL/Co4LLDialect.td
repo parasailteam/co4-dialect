@@ -1,4 +1,4 @@
-//===- StandaloneDialect.td - Standalone dialect -----------*- tablegen -*-===//
+//===- Co4LLDialect.td - Co4 Low-Level Dialect -------------*- tablegen -*-===//
 //
 // This file is licensed under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,16 +6,16 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef STANDALONE_DIALECT
-#define STANDALONE_DIALECT
+#ifndef CO4LL_DIALECT
+#define CO4LL_DIALECT
 
 include "mlir/IR/OpBase.td"
 
 //===----------------------------------------------------------------------===//
-// Standalone dialect definition.
+// Co4LL dialect definition.
 //===----------------------------------------------------------------------===//
 
-def Standalone_Dialect : Dialect {
+def Co4LL_Dialect : Dialect {
     let name = "co4ll";
     let summary = "A standalone out-of-tree MLIR dialect.";
     let description = [{
@@ -27,10 +27,10 @@ def Standalone_Dialect : Dialect {
 }
 
 //===----------------------------------------------------------------------===//
-// Base standalone operation definition.
+// Base Co4LL operation definition.
 //===----------------------------------------------------------------------===//
 
-class Standalone_Op<string mnemonic, list<OpTrait> traits = []> :
-        Op<Standalone_Dialect, mnemonic, traits>;
+class Co4LL_Op<string mnemonic, list<OpTrait> traits = []> :
+        Op<Co4LL_Dialect, mnemonic, traits>;
 
-#endif // STANDALONE_DIALECT
+#endif // CO4LL_DIALECT

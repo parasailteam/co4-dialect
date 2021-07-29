@@ -1,4 +1,4 @@
-//===- StandaloneOps.h - Standalone dialect ops -----------------*- C++ -*-===//
+//===- Co4LLOps.h - Co4 Low-Level Dialect Ops -------------------*- C++ -*-===//
 //
 // This file is licensed under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef STANDALONE_STANDALONEOPS_H
-#define STANDALONE_STANDALONEOPS_H
+#ifndef CO4LL_CO4LLOPS_H
+#define CO4LL_CO4LLOPS_H
 
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Dialect.h"
@@ -15,6 +15,6 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 #define GET_OP_CLASSES
-#include "Standalone/StandaloneOps.h.inc"
+#include "Co4LL/Co4LLOps.h.inc"
 
-#endif // STANDALONE_STANDALONEOPS_H
+#endif // CO4LL_CO4LLOPS_H
