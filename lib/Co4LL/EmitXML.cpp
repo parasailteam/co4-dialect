@@ -89,23 +89,34 @@ void StepEmitter::emitOp(Operation *inst, StringRef type, unsigned numSources) {
 void EmitXMLPass::runOnOperation() {
   ModuleOp m = getOperation();
 
+  llvm::errs() << "<algo name=\"Co4LL\" nchunksperloop=\"1\" nchannels=\"1\" proto=\"Simple\">\n";
   for (auto &op : m.getOps()) {
-    co4ll::TBOp f = cast<co4ll::TBOp>(op);
-    llvm::errs() << "  <tb = id=\"0\" send=\"-1\" recv=\"-1\" chan=\"0\">\n";
-    StepEmitter e;
-    for (Operation &inst : f.getOps()) {
-      TypeSwitch<Operation *>(&inst)
-          .Case<AddFOp>([&](auto addf) { e.emitOp(addf, "addf", 2); })
-          .Case<SubFOp>([&](auto mulf) { e.emitOp(mulf, "subf", 2); })
-          .Case<MulFOp>([&](auto mulf) { e.emitOp(mulf, "mulf", 2); })
-          .Case<math::RsqrtOp>([&](auto rsqrt) { e.emitOp(rsqrt, "rsqrt", 1); })
-          .Case<co4ll::ReturnOp>([&](auto) {})
-          .Default([&](Operation *op) {
-            llvm::errs() << "Unexpected instruction type:\n  " << *op << "\n";
-          });
+    co4ll::GPUOp gpu = cast<co4ll::GPUOp>(op);
+    IntegerAttr gpuid = gpu->getAttrOfType<IntegerAttr>("gpuid");
+    assert(gpuid && "gpuid attr missing");
+    llvm::errs() << " <gpu id=\"" << gpuid.getInt()
+                 << "\" i_chunks=\"1\" o_chunks=\"1\" s_chunks=\"1\" >\n";
+    for (auto &op : gpu.getOps()) {
+      co4ll::TBOp tb = cast<co4ll::TBOp>(op);
+      llvm::errs() << "  <tb id=\"0\" send=\"-1\" recv=\"-1\" chan=\"0\">\n";
+      StepEmitter e;
+      for (Operation &inst : tb.getOps()) {
+        TypeSwitch<Operation *>(&inst)
+            .Case<AddFOp>([&](auto addf) { e.emitOp(addf, "addf", 2); })
+            .Case<SubFOp>([&](auto mulf) { e.emitOp(mulf, "subf", 2); })
+            .Case<MulFOp>([&](auto mulf) { e.emitOp(mulf, "mulf", 2); })
+            .Case<math::RsqrtOp>(
+                [&](auto rsqrt) { e.emitOp(rsqrt, "rsqrt", 1); })
+            .Case<co4ll::ReturnOp>([&](auto) {})
+            .Default([&](Operation *op) {
+              llvm::errs() << "Unexpected instruction type:\n  " << *op << "\n";
+            });
+      }
+      llvm::errs() << "  </tb>\n";
     }
-    llvm::errs() << "  </tb>\n";
+    llvm::errs() << " </gpu>\n";
   }
+  llvm::errs() << "</algo>\n";
 }
 
 void registerEmitXMLPass() {

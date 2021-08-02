@@ -10,8 +10,9 @@
 #define CO4LL_OPS
 
 include "Co4LLDialect.td"
-include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/IR/RegionKindInterface.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def Co4LL_FooOp : Co4LL_Op<"foo", [NoSideEffect,
                                              SameOperandsAndResultType]> {
@@ -40,8 +41,19 @@ def Co4LL_FooOp : Co4LL_Op<"foo", [NoSideEffect,
     }];
 }
 
+def GPUOp : Co4LL_Op<"gpu", [ HasParent<"ModuleOp">,
+  AffineScope, IsolatedFromAbove, NoRegionArguments]
+  # GraphRegionNoTerminator.traits> {
+  let summary = "A container for a single graph region holding thread blocks for a GPU";
+  let description = [{
+    TODO: Write a longer description here.
+  }];
+
+  let regions = (region SizedRegion<1>:$body);
+}
+
 // TODO: make this more function-like?
-def TBOp : Co4LL_Op<"tb", [ ]> {
+def TBOp : Co4LL_Op<"tb", [ HasParent<"GPUOp"> ]> {
   let summary = "A container for a single basic block corresponding to a thread block";
   let description = [{
     TODO: Write a longer description here.

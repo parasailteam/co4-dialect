@@ -1,6 +1,7 @@
 // RUN: co4-opt %s | co4-opt | FileCheck %s
 
 module {
+  "co4ll.gpu"() ({
     // CHECK-LABEL: co4ll.tb
     "co4ll.tb"() ({
       ^bb0 (  %a0 : vector<4xf32>,
@@ -56,4 +57,5 @@ module {
         %w1   = std.subf %a1, %update              { dstbuf=7:index , dstoff=0:index, cnt=1:index } : vector<4xf32>
         "co4ll.return"() : () -> ()
     }) : () -> ()
+  }) { gpuid=0 } : () -> ()
 }
