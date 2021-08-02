@@ -1,5 +1,8 @@
 #include "Co4LL/EmitXML.h"
 
+#include "Co4LL/Co4LLOps.h"
+#include "Co4LL/Co4LLOps.h.inc"
+
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Pass/Pass.h"
@@ -84,12 +87,11 @@ void StepEmitter::emitOp(Operation *inst, StringRef type, unsigned numSources) {
   llvm::errs() << "hasdep=\"" << 0 << "\" \\>\n";
 }
 void EmitXMLPass::runOnOperation() {
-  // Get the current FuncOp operation being operated on.
   ModuleOp m = getOperation();
 
   for (auto &op : m.getOps()) {
-    FuncOp f = cast<FuncOp>(op);
-    llvm::errs() << "FuncStart\n";
+    co4ll::TBOp f = cast<co4ll::TBOp>(op);
+    llvm::errs() << "Thread Block Start\n";
     StepEmitter e;
     for (Operation &inst : f.getOps()) {
       TypeSwitch<Operation *>(&inst)
@@ -97,12 +99,12 @@ void EmitXMLPass::runOnOperation() {
           .Case<SubFOp>([&](auto mulf) { e.emitOp(mulf, "subf", 2); })
           .Case<MulFOp>([&](auto mulf) { e.emitOp(mulf, "mulf", 2); })
           .Case<math::RsqrtOp>([&](auto rsqrt) { e.emitOp(rsqrt, "rsqrt", 1); })
-          .Case<ReturnOp>([&](auto) {})
+          .Case<co4ll::ReturnOp>([&](auto) {})
           .Default([&](Operation *op) {
             llvm::errs() << "Unexpected instruction type:\n  " << *op << "\n";
           });
     }
-    llvm::errs() << "FuncEnd\n";
+    llvm::errs() << "Thread Block End\n";
   }
 }
 

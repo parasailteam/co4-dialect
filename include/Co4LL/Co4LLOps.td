@@ -11,6 +11,7 @@
 
 include "Co4LLDialect.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
 
 def Co4LL_FooOp : Co4LL_Op<"foo", [NoSideEffect,
                                              SameOperandsAndResultType]> {
@@ -37,6 +38,30 @@ def Co4LL_FooOp : Co4LL_Op<"foo", [NoSideEffect,
     let assemblyFormat = [{
         $input attr-dict `:` type($input)
     }];
+}
+
+// TODO: make this more function-like?
+def TBOp : Co4LL_Op<"tb", [ ]> {
+  let summary = "A container for a single basic block corresponding to a thread block";
+  let description = [{
+    TODO: Write a longer description here.
+  }];
+
+  let regions = (region SizedRegion<1>:$body);
+}
+
+// Adapted from standard dialect
+def ReturnOp : Co4LL_Op<"return", [NoSideEffect, HasParent<"TBOp">,
+                                MemRefsNormalizable, ReturnLike, Terminator]> {
+  let summary = "return operation";
+  let description = [{
+    The `return` operation represents a return operation within a thread block.
+    The operation takes variable number of operands and produces no results.
+    The operand number and types must match the signature of the function
+    that contains the operation.
+  }];
+
+  let arguments = (ins Variadic<AnyType>:$operands);
 }
 
 #endif // CO4LL_OPS
