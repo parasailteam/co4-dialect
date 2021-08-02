@@ -57,7 +57,7 @@ static std::tuple<int, int> getDstBufferAndOffset(const Value v) {
 }
 
 void StepEmitter::emitOp(Operation *inst, StringRef type, unsigned numSources) {
-  llvm::errs() << "<step s=\"" << stepcount++ << "\" "
+  llvm::errs() << "   <step s=\"" << stepcount++ << "\" "
                << "type=\"" << type << "\" ";
   if (numSources > 0) {
     int srcbuf, srcoff;
@@ -91,7 +91,7 @@ void EmitXMLPass::runOnOperation() {
 
   for (auto &op : m.getOps()) {
     co4ll::TBOp f = cast<co4ll::TBOp>(op);
-    llvm::errs() << "Thread Block Start\n";
+    llvm::errs() << "  <tb = id=\"0\" send=\"-1\" recv=\"-1\" chan=\"0\">\n";
     StepEmitter e;
     for (Operation &inst : f.getOps()) {
       TypeSwitch<Operation *>(&inst)
@@ -104,7 +104,7 @@ void EmitXMLPass::runOnOperation() {
             llvm::errs() << "Unexpected instruction type:\n  " << *op << "\n";
           });
     }
-    llvm::errs() << "Thread Block End\n";
+    llvm::errs() << "  </tb>\n";
   }
 }
 
