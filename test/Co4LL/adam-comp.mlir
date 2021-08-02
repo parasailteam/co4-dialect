@@ -1,4 +1,4 @@
-// RUN: co4-opt %s | co4-opt | FileCheck %s
+// RUN: co4-opt %s | co4-opt --co4-bufalloc | co4-opt | FileCheck %s
 
 module {
   "co4ll.gpu"() ({
@@ -37,13 +37,13 @@ module {
               %a30 : vector<4xf32>,
               %a31 : vector<4xf32>) :
         // m1 = m * beta1 + g1 * compbeta1
-        %tmp1 = std.mulf %a2, %a16                 { dstbuf=12:index, dstoff=0:index, cnt=1:index } : vector<4xf32>
-        %tmp2 = std.mulf %a4, %a17                 { dstbuf=5:index , dstoff=0:index, cnt=1:index } : vector<4xf32>
+        %tmp1 = std.mulf %a2, %a16                                                                  : vector<4xf32>
+        %tmp2 = std.mulf %a4, %a17                                                                  : vector<4xf32>
         %m1   = std.addf %tmp1, %tmp2              { dstbuf=5:index , dstoff=0:index, cnt=1:index } : vector<4xf32>
         // v1 = v * beta2 + g1 * g1 * compbeta2
-        %tmp3 = std.mulf %a3, %a19                 { dstbuf=12:index, dstoff=0:index, cnt=1:index } : vector<4xf32>
-        %tmp4 = std.mulf %a4, %a20                 { dstbuf=6:index , dstoff=0:index, cnt=1:index } : vector<4xf32>
-        %tmp5 = std.mulf %a4, %tmp4                { dstbuf=6:index , dstoff=0:index, cnt=1:index } : vector<4xf32>
+        %tmp3 = std.mulf %a3, %a19                                                                  : vector<4xf32>
+        %tmp4 = std.mulf %a4, %a20                                                                  : vector<4xf32>
+        %tmp5 = std.mulf %a4, %tmp4                                                                 : vector<4xf32>
         %v1   = std.addf %tmp3, %tmp5              { dstbuf=6:index , dstoff=0:index, cnt=1:index } : vector<4xf32>
         // m_ = m1 / beta1
         %m_   = std.mulf %m1, %a18                 { dstbuf=8:index , dstoff=0:index, cnt=1:index } : vector<4xf32>
@@ -51,7 +51,7 @@ module {
         %v_   = std.mulf %v1, %a21                 { dstbuf=9:index , dstoff=0:index, cnt=1:index } : vector<4xf32>
         // update = lr * m_ / sqrt(v_)
         %scatteredUpdate = std.mulf %m_, %a22      { dstbuf=10:index, dstoff=0:index, cnt=1:index } : vector<4xf32>
-        %tmp8 = math.rsqrt %v_                     { dstbuf=9:index , dstoff=0:index, cnt=1:index } : vector<4xf32>
+        %tmp8 = math.rsqrt %v_                                                                      : vector<4xf32>
         %update = std.mulf %scatteredUpdate, %tmp8 { dstbuf=11:index, dstoff=0:index, cnt=1:index } : vector<4xf32>
         // w1 = w - update
         %w1   = std.subf %a1, %update              { dstbuf=7:index , dstoff=0:index, cnt=1:index } : vector<4xf32>

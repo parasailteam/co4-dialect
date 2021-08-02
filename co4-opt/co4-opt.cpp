@@ -22,11 +22,13 @@
 #include "Co4LL/Co4LLDialect.h"
 #include "Co4LL/Co4LLOpsDialect.cpp.inc"
 
+#include "Co4LL/BufAlloc.h"
 #include "Co4LL/EmitXML.h"
 
 int main(int argc, char **argv) {
   mlir::registerAllPasses();
 
+  registerBufAllocPass();
   registerEmitXMLPass();
 
   mlir::DialectRegistry registry;
