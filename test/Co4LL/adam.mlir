@@ -36,10 +36,6 @@ module {
               %a29 : vector<4xf32>,
               %a30 : vector<4xf32>,
               %a31 : vector<4xf32>) :
-        %c0 = constant 0 : i64
-        %c1 = constant 1 : i64
-        %c2 = constant 2 : i64
-        %c3 = constant 3 : i64
         // g1 = AllReduce(g)
         %g_0 = vector.extract_strided_slice %a0
             { offsets = [0], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
@@ -57,15 +53,7 @@ module {
         %g1_3 = "co4ll.rcs"() : () -> (vector<1xf32>)
         %g1_2 = "co4ll.rcs"() : () -> (vector<1xf32>)
         %g1_1 = "co4ll.recv"() : () -> (vector<1xf32>)
-        %g1_init = constant dense<0.0> : vector<4xf32>
-        %g1_0scalar = llvm.extractelement %g1_0[%c0 : i64] : vector<1xf32>
-        %g1_init1 = llvm.insertelement %g1_0scalar, %g1_init[%c0 :i64] : vector<4xf32>
-        %g1_1scalar = llvm.extractelement %g1_1[%c1 : i64] : vector<1xf32>
-        %g1_init2 = llvm.insertelement %g1_1scalar, %g1_init[%c0 :i64] : vector<4xf32>
-        %g1_2scalar = llvm.extractelement %g1_2[%c2 : i64] : vector<1xf32>
-        %g1_init3 = llvm.insertelement %g1_2scalar, %g1_init[%c0 :i64] : vector<4xf32>
-        %g1_3scalar = llvm.extractelement %g1_3[%c3 : i64] : vector<1xf32>
-        %g1 = llvm.insertelement %g1_3scalar, %g1_init[%c0 :i64] { dstbuf=4:i64 , dstoff=0:i64, cnt=1:i64 } : vector<4xf32>
+        %g1 = "co4ll.concat"(%g1_0, %g1_1, %g1_2, %g1_3) { dstbuf=4:i64 , dstoff=0:i64, cnt=1:i64 } : (vector<1xf32>, vector<1xf32>, vector<1xf32>, vector<1xf32>) -> (vector<4xf32>)
         // m1 = m * beta1 + g1 * compbeta1
         %tmp1 = std.mulf %a2, %a16                                                                  : vector<4xf32>
         %tmp2 = std.mulf %g1, %a17                                                                  : vector<4xf32>
