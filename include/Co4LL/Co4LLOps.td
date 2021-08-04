@@ -76,4 +76,72 @@ def ReturnOp : Co4LL_Op<"return", [NoSideEffect, HasParent<"TBOp">,
   let arguments = (ins Variadic<AnyType>:$operands);
 }
 
+def Co4LL_SendOp : Co4LL_Op<"send", [ ]> {
+    let summary = "transmit data";
+    let description = [{
+        The `co4ll.send` operation consumes a local value and transmits it
+        to the GPU whose ID is given as the current threadblock's send attribute
+    }];
+
+    let arguments = (ins VectorOfRank<[1]>:$input);
+}
+
+def Co4LL_RecvOp : Co4LL_Op<"recv", [ ]> {
+    let summary = "receive data";
+    let description = [{
+        The `co4ll.recv` operation receives a value transmitted from the GPU
+        whose ID is given as the current threadblock's recv attribute.
+        The received value is made available as a result of this operation
+        to be consumed by subsequent local operations.
+    }];
+
+    let results = (outs VectorOfRank<[1]>:$res);
+}
+
+def Co4LL_RecvReduceSendOp : Co4LL_Op<"rrs", [ ]> {
+    let summary = "receives and reduces data, and transmits the result";
+    let description = [{
+        The `co4ll.rrs` operation consumes a local value, and also receives
+        data from another GPU, reduces these values together (elementwise),
+        and finally transmits the resulting reduced data to another GPU.
+        The GPU performing the `rrs` operation does update its local buffer
+        or otherwise keep a local copy of either the received data or
+        the reduced result that is transmitted.
+        If you need to keep a local copy, use `co4ll.rrc`.
+    }];
+
+    let arguments = (ins VectorOfRank<[1]>:$input);
+}
+
+def Co4LL_RecvReduceCopyOp : Co4LL_Op<"rrc", [SameOperandsAndResultType]> {
+    let summary = "receives and reduces data";
+    let description = [{
+        The `co4ll.rrc` operation consumes a local value, and also receives
+        data from another GPU, reduces these values together (elementwise),
+        and finally makes the resulting reduced value available to be used
+        by subsequent local operaitons.
+        Note that the received value prior to the reduction is not stored.
+        If you need the received value in addition to the reduced value,
+        use `co4ll.recv` and a separate local arithmetic operation.
+    }];
+
+    let arguments = (ins VectorOfRank<[1]>:$input);
+    let results = (outs VectorOfRank<[1]>:$res);
+}
+
+def Co4LL_RecvCopySendOp : Co4LL_Op<"rcs", [ ]> {
+    let summary = "receive and transmit data without modifying it";
+    let description = [{
+        This is essentially a fused `co4ll.recv` and `co4ll.send`.
+        The `co4ll.rcs` operation receives a value transmitted from some GPU
+        whose ID is given as the current threadblock's recv attribute.
+        The received value is made available as a result of this operation
+        to be consumed by subsequent local operations.
+        Additionally, the same value is also transmitted to another GPU.
+    }];
+
+    let results = (outs VectorOfRank<[1]>:$res);
+}
+
+
 #endif // CO4LL_OPS
