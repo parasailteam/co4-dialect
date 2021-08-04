@@ -61,7 +61,6 @@ void BufAllocPass::runOnOperation() {
           //llvm::errs() << "Instruction asigned to use available dstbuf: " << dstbuf << "\n";
           inst.setAttr("dstbuf", IntegerAttr::get(indexType, dstbuf));
           inst.setAttr("dstoff", IntegerAttr::get(indexType, 0));
-          inst.setAttr("cnt", IntegerAttr::get(indexType, 1));
           usedBufs[dstbuf] = true;
         }
       }

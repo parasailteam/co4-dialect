@@ -53,26 +53,26 @@ module {
         %g1_3 = "co4ll.rcs"() : () -> (vector<1xf32>)
         %g1_2 = "co4ll.rcs"() : () -> (vector<1xf32>)
         %g1_1 = "co4ll.recv"() : () -> (vector<1xf32>)
-        %g1 = "co4ll.concat"(%g1_0, %g1_1, %g1_2, %g1_3) { dstbuf=4:i64 , dstoff=0:i64, cnt=1:i64 } : (vector<1xf32>, vector<1xf32>, vector<1xf32>, vector<1xf32>) -> (vector<4xf32>)
+        %g1 = "co4ll.concat"(%g1_0, %g1_1, %g1_2, %g1_3) { dstbuf=4:i64 , dstoff=0:i64 } : (vector<1xf32>, vector<1xf32>, vector<1xf32>, vector<1xf32>) -> (vector<4xf32>)
         // m1 = m * beta1 + g1 * compbeta1
         %tmp1 = std.mulf %a2, %a16                                                                  : vector<4xf32>
         %tmp2 = std.mulf %g1, %a17                                                                  : vector<4xf32>
-        %m1   = std.addf %tmp1, %tmp2              { dstbuf=5:i64 , dstoff=0:i64, cnt=1:i64 } : vector<4xf32>
+        %m1   = std.addf %tmp1, %tmp2              { dstbuf=5:i64 , dstoff=0:i64 } : vector<4xf32>
         // v1 = v * beta2 + g1 * g1 * compbeta2
         %tmp3 = std.mulf %a3, %a19                                                                  : vector<4xf32>
         %tmp4 = std.mulf %g1, %a20                                                                  : vector<4xf32>
         %tmp5 = std.mulf %g1, %tmp4                                                                 : vector<4xf32>
-        %v1   = std.addf %tmp3, %tmp5              { dstbuf=6:i64 , dstoff=0:i64, cnt=1:i64 } : vector<4xf32>
+        %v1   = std.addf %tmp3, %tmp5              { dstbuf=6:i64 , dstoff=0:i64 } : vector<4xf32>
         // m_ = m1 / beta1
-        %m_   = std.mulf %m1, %a18                 { dstbuf=8:i64 , dstoff=0:i64, cnt=1:i64 } : vector<4xf32>
+        %m_   = std.mulf %m1, %a18                 { dstbuf=8:i64 , dstoff=0:i64 } : vector<4xf32>
         // v_ = v1 / beta2
-        %v_   = std.mulf %v1, %a21                 { dstbuf=9:i64 , dstoff=0:i64, cnt=1:i64 } : vector<4xf32>
+        %v_   = std.mulf %v1, %a21                 { dstbuf=9:i64 , dstoff=0:i64 } : vector<4xf32>
         // update = lr * m_ / sqrt(v_)
-        %scatteredUpdate = std.mulf %m_, %a22      { dstbuf=10:i64, dstoff=0:i64, cnt=1:i64 } : vector<4xf32>
+        %scatteredUpdate = std.mulf %m_, %a22      { dstbuf=10:i64, dstoff=0:i64 } : vector<4xf32>
         %tmp8 = math.rsqrt %v_                                                                      : vector<4xf32>
-        %update = std.mulf %scatteredUpdate, %tmp8 { dstbuf=11:i64, dstoff=0:i64, cnt=1:i64 } : vector<4xf32>
+        %update = std.mulf %scatteredUpdate, %tmp8 { dstbuf=11:i64, dstoff=0:i64 } : vector<4xf32>
         // w1 = w - update
-        %w1   = std.subf %a1, %update              { dstbuf=7:i64 , dstoff=0:i64, cnt=1:i64 } : vector<4xf32>
+        %w1   = std.subf %a1, %update              { dstbuf=7:i64 , dstoff=0:i64 } : vector<4xf32>
         "co4ll.return"() : () -> ()
     }) : () -> ()
   }) { gpuid=0 } : () -> ()

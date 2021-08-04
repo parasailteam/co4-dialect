@@ -77,9 +77,11 @@ void StepEmitter::emitOp(Operation *inst, StringRef type, unsigned numSources) {
   llvm::errs() << "dstbuf=\"" << "a" << dstbuf << "\" "
                << "dstoff=\"" << dstoff << "\" ";
 
-  IntegerAttr cnt = inst->getAttrOfType<IntegerAttr>("cnt");
-  assert(cnt && "cnt attr missing");
-  llvm::errs() << "cnt=\"" << cnt.getInt() << "\" ";
+  if (inst->getNumResults() == 1) {
+    ShapedType resultType = inst->getResult(0).getType().dyn_cast<ShapedType>();
+    assert(resultType);
+    llvm::errs() << "cnt=\"" << resultType.getNumElements() << "\" ";
+  }
 
   // TODO: handle dependencies
   llvm::errs() << "depid=\"" << -1 << "\" ";
