@@ -3,8 +3,9 @@
 #include "Co4LL/Co4LLOps.h"
 #include "Co4LL/Co4LLOps.h.inc"
 
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Dialect/Math/IR/Math.h"
+#include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/Dialect/Vector/VectorOps.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -34,7 +35,7 @@ struct EmitXMLPass final
 struct StepEmitter {
   unsigned stepcount = 0;
 
-  void emitOp(Operation *inst, StringRef type, unsigned numSources);
+  void emitOp(Operation *inst, StringRef type);
 };
 } // end anonymous namespace
 
@@ -56,15 +57,19 @@ static std::tuple<int, int> getDstBufferAndOffset(const Value v) {
   }
 }
 
-void StepEmitter::emitOp(Operation *inst, StringRef type, unsigned numSources) {
+void StepEmitter::emitOp(Operation *inst, StringRef type) {
   llvm::errs() << "   <step s=\"" << stepcount++ << "\" "
                << "type=\"" << type << "\" ";
-  if (numSources > 0) {
-    int srcbuf, srcoff;
+  unsigned numSources = inst->getNumOperands();
+  int srcbuf, srcoff;
+  if (numSources > 0)
     std::tie(srcbuf, srcoff) = getDstBufferAndOffset(inst->getOperand(0));
-    llvm::errs() << "srcbuf=\"" << "a" << srcbuf << "\" "
-                 << "srcoff=\"" << srcoff << "\" ";
-  }
+  else
+    // No meaningful source, but XML interpreter expects to parse at least
+    // 1 src per instruction.
+    std::tie(srcbuf, srcoff) = std::make_tuple(-1, 0);
+  llvm::errs() << "srcbuf=\"" << "a" << srcbuf << "\" "
+               << "srcoff=\"" << srcoff << "\" ";
   if (numSources > 1) {
     int srcbuf, srcoff;
     std::tie(srcbuf, srcoff) = getDstBufferAndOffset(inst->getOperand(1));
@@ -73,7 +78,12 @@ void StepEmitter::emitOp(Operation *inst, StringRef type, unsigned numSources) {
   }
 
   int dstbuf, dstoff;
-  std::tie(dstbuf, dstoff) = getDstBufferAndOffset(inst->getResult(0));
+  if (inst->getNumResults() >= 1)
+    std::tie(dstbuf, dstoff) = getDstBufferAndOffset(inst->getResult(0));
+  else
+    // No meaningful destination, but XML interpreter expects to parse
+    // 1 dst per instruction.
+    std::tie(dstbuf, dstoff) = std::make_tuple(-1, 0);
   llvm::errs() << "dstbuf=\"" << "a" << dstbuf << "\" "
                << "dstoff=\"" << dstoff << "\" ";
 
@@ -104,12 +114,21 @@ void EmitXMLPass::runOnOperation() {
       StepEmitter e;
       for (Operation &inst : tb.getOps()) {
         TypeSwitch<Operation *>(&inst)
-            .Case<AddFOp>([&](auto addf) { e.emitOp(addf, "addf", 2); })
-            .Case<SubFOp>([&](auto mulf) { e.emitOp(mulf, "subf", 2); })
-            .Case<MulFOp>([&](auto mulf) { e.emitOp(mulf, "mulf", 2); })
-            .Case<math::RsqrtOp>(
-                [&](auto rsqrt) { e.emitOp(rsqrt, "rsqrt", 1); })
+            .Case<AddFOp>([&](auto addf) { e.emitOp(addf, "addf"); })
+            .Case<SubFOp>([&](auto mulf) { e.emitOp(mulf, "subf"); })
+            .Case<MulFOp>([&](auto mulf) { e.emitOp(mulf, "mulf"); })
+            .Case<math::RsqrtOp>([&](auto rsqrt) { e.emitOp(rsqrt, "rsqrt"); })
+            .Case<co4ll::SendOp>([&](auto send) { e.emitOp(send, "s"); })
+            .Case<co4ll::RecvOp>([&](auto recv) { e.emitOp(recv, "r"); })
+            .Case<co4ll::RecvReduceSendOp>(
+                [&](auto send) { e.emitOp(send, "rrs"); })
+            .Case<co4ll::RecvReduceCopyOp>(
+                [&](auto send) { e.emitOp(send, "rrc"); })
+            .Case<co4ll::RecvCopySendOp>(
+                [&](auto send) { e.emitOp(send, "rcs"); })
             .Case<co4ll::ReturnOp>([&](auto) {})
+            .Case<vector::ExtractStridedSliceOp>([&](auto) {})
+            .Case<co4ll::ConcatOp>([&](auto) {})
             .Default([&](Operation *op) {
               llvm::errs() << "Unexpected instruction type:\n  " << *op << "\n";
             });
