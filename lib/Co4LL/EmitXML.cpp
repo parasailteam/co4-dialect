@@ -1,5 +1,7 @@
 #include "Co4LL/EmitXML.h"
 
+#include "Utils.h"
+
 #include "Co4LL/Co4LLOps.h"
 #include "Co4LL/Co4LLOps.h.inc"
 
@@ -39,15 +41,30 @@ struct StepEmitter {
 };
 } // end anonymous namespace
 
-static std::tuple<int, int> getDstBufferAndOffset(const Value v) {
+std::tuple<int, int> mlir::co4ll::getDstBufferAndOffset(const Value v) {
   if (const OpResult o = v.dyn_cast<OpResult>()) {
-    IntegerAttr dstbufAttr = o.getOwner()->getAttrOfType<IntegerAttr>("dstbuf");
-    assert(dstbufAttr && "dstbuf attr missing");
-    int dstbuf = dstbufAttr.getInt();
+    int dstbuf, dstoff;
+    if (vector::ExtractStridedSliceOp extract =
+            llvm::dyn_cast<vector::ExtractStridedSliceOp>(o.getOwner())) {
+      assert(llvm::all_of(extract.strides(), [](Attribute attr) {
+        return attr.cast<IntegerAttr>().getInt() == 1;
+      }));
 
-    IntegerAttr dstoffAttr = o.getOwner()->getAttrOfType<IntegerAttr>("dstoff");
-    assert(dstoffAttr && "dstoff attr missing");
-    int dstoff = dstoffAttr.getInt();
+      assert(extract.offsets().size() == 1);
+
+      std::tie(dstbuf, dstoff) = getDstBufferAndOffset(extract.getOperand());
+      dstoff += extract.offsets()[0].cast<IntegerAttr>().getInt();
+    } else {
+      IntegerAttr dstbufAttr =
+          o.getOwner()->getAttrOfType<IntegerAttr>("dstbuf");
+      assert(dstbufAttr && "dstbuf attr missing");
+      dstbuf = dstbufAttr.getInt();
+
+      IntegerAttr dstoffAttr =
+          o.getOwner()->getAttrOfType<IntegerAttr>("dstoff");
+      assert(dstoffAttr && "dstoff attr missing");
+      dstoff = dstoffAttr.getInt();
+    }
 
     return std::make_tuple(dstbuf, dstoff);
   } else if (const BlockArgument arg = v.dyn_cast<BlockArgument>()) {
@@ -63,7 +80,7 @@ void StepEmitter::emitOp(Operation *inst, StringRef type) {
   unsigned numSources = inst->getNumOperands();
   int srcbuf, srcoff;
   if (numSources > 0)
-    std::tie(srcbuf, srcoff) = getDstBufferAndOffset(inst->getOperand(0));
+    std::tie(srcbuf, srcoff) = co4ll::getDstBufferAndOffset(inst->getOperand(0));
   else
     // No meaningful source, but XML interpreter expects to parse at least
     // 1 src per instruction.
@@ -72,14 +89,14 @@ void StepEmitter::emitOp(Operation *inst, StringRef type) {
                << "srcoff=\"" << srcoff << "\" ";
   if (numSources > 1) {
     int srcbuf, srcoff;
-    std::tie(srcbuf, srcoff) = getDstBufferAndOffset(inst->getOperand(1));
+    std::tie(srcbuf, srcoff) = co4ll::getDstBufferAndOffset(inst->getOperand(1));
     llvm::errs() << "src2buf=\"" << "a" << srcbuf << "\" "
                  << "src2off=\"" << srcoff << "\" ";
   }
 
   int dstbuf, dstoff;
   if (inst->getNumResults() >= 1)
-    std::tie(dstbuf, dstoff) = getDstBufferAndOffset(inst->getResult(0));
+    std::tie(dstbuf, dstoff) = co4ll::getDstBufferAndOffset(inst->getResult(0));
   else
     // No meaningful destination, but XML interpreter expects to parse
     // 1 dst per instruction.

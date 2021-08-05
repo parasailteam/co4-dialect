@@ -5,6 +5,7 @@
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Dialect/Math/IR/Math.h"
+#include "mlir/Dialect/Vector/VectorOps.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -31,8 +32,36 @@ struct BufAllocPass final
   void runOnOperation() override;
 };
 
+struct BufAlloc final {
+  const unsigned numArguments;
+  bool *const usedBufs;
+  BufAlloc(unsigned numArguments)
+      : numArguments(numArguments), usedBufs(new bool[numArguments]) {}
+  ~BufAlloc() { delete[] usedBufs; }
+
+  void setUsed(unsigned argNumber, bool used) { usedBufs[argNumber] = used; }
+  bool setDst(Operation *op);
+};
+
 } // end anonymous namespace
 
+bool BufAlloc::setDst(Operation *op) {
+  IntegerAttr dstbufAttr = op->getAttrOfType<IntegerAttr>("dstbuf");
+  if (dstbufAttr) {
+    //llvm::errs() << "Instruction using dstbuf: " << dstbufAttr.getInt() << "\n";
+    //usedBufs[dstbufAttr.getInt()] = false;
+    return false;
+  } else {
+    IntegerType indexType = IntegerType::get(op->getContext(), 64);
+    int dstbuf =
+        std::find(usedBufs, usedBufs + numArguments, false) - usedBufs;
+    //llvm::errs() << "Instruction asigned to use available dstbuf: " << dstbuf << "\n";
+    op->setAttr("dstbuf", IntegerAttr::get(indexType, dstbuf));
+    op->setAttr("dstoff", IntegerAttr::get(indexType, 0));
+    usedBufs[dstbuf] = true;
+    return true;
+  }
+}
 
 void BufAllocPass::runOnOperation() {
   ModuleOp m = getOperation();
@@ -43,28 +72,24 @@ void BufAllocPass::runOnOperation() {
       co4ll::TBOp tb = cast<co4ll::TBOp>(op);
       Region &r = tb.getRegion();
       Block &b = r.front();
-      bool* usedBufs = new bool[r.getNumArguments()];
+      BufAlloc alloc{r.getNumArguments()};
       for (BlockArgument &arg : r.getArguments()) {
-        usedBufs[arg.getArgNumber()] = !arg.use_empty();
+        alloc.setUsed(arg.getArgNumber(), !arg.use_empty());
       }
-      for (Operation &inst : llvm::reverse(b)) {
-        if (inst.getNumResults() == 0) continue;
-
-        IntegerAttr dstbufAttr =
-            inst.getAttrOfType<IntegerAttr>("dstbuf");
-        if (dstbufAttr) {
-          //llvm::errs() << "Instruction using dstbuf: " << dstbufAttr.getInt() << "\n";
-          //usedBufs[dstbufAttr.getInt()] = false;
-        } else {
-          IndexType indexType = IndexType::get(inst.getContext());
-          int dstbuf = std::find(usedBufs, usedBufs + r.getNumArguments(), false) - usedBufs;
-          //llvm::errs() << "Instruction asigned to use available dstbuf: " << dstbuf << "\n";
-          inst.setAttr("dstbuf", IntegerAttr::get(indexType, dstbuf));
-          inst.setAttr("dstoff", IntegerAttr::get(indexType, 0));
-          usedBufs[dstbuf] = true;
+      bool changed = false;
+      do {
+        changed = false;
+        for (Operation &inst : llvm::reverse(b)) {
+          if (inst.getNumResults() == 0)
+            continue;
+          changed |=
+              TypeSwitch<Operation *, bool>(&inst)
+                  .Case<vector::ExtractStridedSliceOp>(
+                      [&](auto extract) { return false; })
+                  .Case<co4ll::ConcatOp>([&](auto) { return false; })
+                  .Default([&](Operation *op) { return alloc.setDst(op); });
         }
-      }
-      delete[] usedBufs;
+      } while (changed);
     }
   }
 }
