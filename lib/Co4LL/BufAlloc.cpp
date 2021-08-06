@@ -40,27 +40,81 @@ struct BufAlloc final {
   ~BufAlloc() { delete[] usedBufs; }
 
   void setUsed(unsigned argNumber, bool used) { usedBufs[argNumber] = used; }
-  bool setDst(Operation *op);
+  bool pickDst(Operation *op);
 };
 
 } // end anonymous namespace
 
-bool BufAlloc::setDst(Operation *op) {
+static bool setDstBufferAndOffset(Operation *op, int dstbuf, unsigned offset);
+
+// end forward declarations
+
+static bool propagateDsts(co4ll::ConcatOp concat) {
+  IntegerAttr dstbufAttr = concat->getAttrOfType<IntegerAttr>("dstbuf");
+  IntegerAttr dstoffAttr = concat->getAttrOfType<IntegerAttr>("dstoff");
+  if (!(dstbufAttr && dstoffAttr))
+    return false;
+
+  bool changed = false;
+
+  unsigned offset = dstoffAttr.getInt();
+  for (Value v : concat.operands()) {
+    // Does it even make sense to concatenate an entire arg array into an even larger array,
+    // or should array sizes and offsets be limited to the size of a single arg array?
+    assert(!v.isa<BlockArgument>() &&
+           "We don't support using an arg array in a concatenation");
+    Operation *inputOp = v.cast<OpResult>().getOwner();
+    changed |= setDstBufferAndOffset(inputOp, dstbufAttr.getInt(), offset);
+
+    offset += v.getType().cast<ShapedType>().getNumElements();
+  }
+
+  return changed;
+}
+
+static bool setDstBufferAndOffset(Operation *op, int dstbuf, unsigned offset) {
+  IntegerType indexType = IntegerType::get(op->getContext(), 64);
+
+  assert(op->getNumResults() == 1);
+
+  bool changed = false;
+
+  IntegerAttr dstbufAttr = op->getAttrOfType<IntegerAttr>("dstbuf");
+  if (dstbufAttr) {
+    assert(dstbufAttr.getInt() == dstbuf && "target buffer already set inconsistently");
+  } else {
+    op->setAttr("dstbuf", IntegerAttr::get(indexType, dstbuf));
+    changed = true;
+  }
+
+  IntegerAttr dstoffAttr = op->getAttrOfType<IntegerAttr>("dstoff");
+  if (dstoffAttr) {
+    assert(dstoffAttr.getInt() == offset && "offset already set inconsistently");
+  } else {
+    op->setAttr("dstoff", IntegerAttr::get(indexType, offset));
+    changed = true;
+  }
+
+  if (co4ll::ConcatOp concat = dyn_cast<co4ll::ConcatOp>(op))
+    changed |= propagateDsts(concat);
+
+  return changed;
+}
+
+bool BufAlloc::pickDst(Operation *op) {
   IntegerAttr dstbufAttr = op->getAttrOfType<IntegerAttr>("dstbuf");
   if (dstbufAttr) {
     //llvm::errs() << "Instruction using dstbuf: " << dstbufAttr.getInt() << "\n";
     //usedBufs[dstbufAttr.getInt()] = false;
     return false;
-  } else {
-    IntegerType indexType = IntegerType::get(op->getContext(), 64);
-    int dstbuf =
-        std::find(usedBufs, usedBufs + numArguments, false) - usedBufs;
-    //llvm::errs() << "Instruction asigned to use available dstbuf: " << dstbuf << "\n";
-    op->setAttr("dstbuf", IntegerAttr::get(indexType, dstbuf));
-    op->setAttr("dstoff", IntegerAttr::get(indexType, 0));
-    usedBufs[dstbuf] = true;
-    return true;
   }
+
+  int dstbuf = std::find(usedBufs, usedBufs + numArguments, false) - usedBufs;
+  //llvm::errs() << "Instruction asigned to use available dstbuf: " << dstbuf << "\n";
+  setDstBufferAndOffset(op, dstbuf, 0);
+
+  usedBufs[dstbuf] = true;
+  return true;
 }
 
 void BufAllocPass::runOnOperation() {
@@ -86,8 +140,10 @@ void BufAllocPass::runOnOperation() {
               TypeSwitch<Operation *, bool>(&inst)
                   .Case<vector::ExtractStridedSliceOp>(
                       [&](auto extract) { return false; })
-                  .Case<co4ll::ConcatOp>([&](auto) { return false; })
-                  .Default([&](Operation *op) { return alloc.setDst(op); });
+                  .Case<co4ll::ConcatOp>([&](co4ll::ConcatOp concat) {
+                    return propagateDsts(concat);
+                  })
+                  .Default([&](Operation *op) { return alloc.pickDst(op); });
         }
       } while (changed);
     }
