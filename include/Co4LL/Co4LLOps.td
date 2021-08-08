@@ -146,11 +146,13 @@ def Co4LL_RecvCopySendOp : Co4LL_Op<"rcs", [ ]> {
 def Co4LL_ConcatOp : Co4LL_Op<"concat", [ ]> {
     let summary = "concatenates 1-D vectors into a longer 1-D vector";
     let description = [{
-    TODO: decide on invariants (do the inputs need to all be of the same type?)
+    This variadic operation takes one or more input vectors and produces one output vector.
     }];
 
     let arguments = (ins Variadic<VectorOfRank<[1]>>:$operands);
     let results = (outs VectorOfRank<[1]>:$res);
+
+    let verifier = [{ return ::verify(*this); }];
 }
 
 
