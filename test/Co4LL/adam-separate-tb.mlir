@@ -59,7 +59,7 @@ module {
   }) { gpuid=0 } : () -> ()
   "co4ll.gpu"() ({
     // CHECK-LABEL: co4ll.tb
-    "co4ll.tb"() ({
+    %w1 = "co4ll.tb"() ({
       ^bb0 (  %a0 : vector<4xf32>,
               %a1 : vector<4xf32>,
               %a2 : vector<4xf32>,
@@ -111,7 +111,7 @@ module {
         %update = std.mulf %scatteredUpdate, %tmp8 { dstbuf=11:i64, dstoff=0:i64 } : vector<4xf32>
         // w1 = w - update
         %w1   = std.subf %a1, %update              { dstbuf=7:i64 , dstoff=0:i64 } : vector<4xf32>
-        "co4ll.return"() : () -> ()
-    }) : () -> ()
+        "co4ll.return"(%w1) : (vector<4xf32>) -> ()
+    }) : () -> (vector<4xf32>)
   }) { gpuid=0 } : () -> ()
 }

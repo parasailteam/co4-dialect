@@ -27,5 +27,24 @@ static LogicalResult verify(co4ll::ConcatOp op) {
   return success();
 }
 
+static LogicalResult verify(co4ll::TBOp op) {
+  Operation* term = op.getRegion().front().getTerminator();
+  co4ll::ReturnOp ret = dyn_cast<co4ll::ReturnOp>(term);
+  if (!ret)
+    return op.emitOpError(
+        "expects body to be single basic block terminating in co4ll.return op");
+  if (op->getNumResults() != ret->getNumOperands())
+    return op.emitOpError(
+        "expects number of results to equal number of operands in nested co4ll.return op");
+  for (unsigned i = 0; i < op->getNumResults(); i++) {
+    if (op->getResult(i).getType() != ret->getOperand(i).getType())
+      return op.emitOpError(
+                 "expects result types to match operands of nested "
+                 "co4ll.return op, but encountered mismatch for operand ")
+             << (i + 1) << " out of " << op->getNumResults();
+  }
+  return success();
+}
+
 #define GET_OP_CLASSES
 #include "Co4LL/Co4LLOps.cpp.inc"

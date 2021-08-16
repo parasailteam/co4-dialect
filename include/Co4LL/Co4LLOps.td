@@ -52,14 +52,17 @@ def GPUOp : Co4LL_Op<"gpu", [ HasParent<"ModuleOp">,
   let regions = (region SizedRegion<1>:$body);
 }
 
-// TODO: make this more function-like?
 def TBOp : Co4LL_Op<"tb", [ HasParent<"GPUOp"> ]> {
   let summary = "A container for a single basic block corresponding to a thread block";
   let description = [{
-    TODO: Write a longer description here.
+    This co4ll.tb op must have a single block that terminates in a co4ll.return op,
+    and the operand(s) of that nested return op are made available as result(s) of this co4ll.tb op.
   }];
 
   let regions = (region SizedRegion<1>:$body);
+  let results = (outs Variadic<VectorOfRank<[1]>>:$res);
+
+  let verifier = [{ return ::verify(*this); }];
 }
 
 // Adapted from standard dialect
