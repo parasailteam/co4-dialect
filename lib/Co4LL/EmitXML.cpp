@@ -115,6 +115,7 @@ void StepEmitter::emitOp(Operation *inst, StringRef type) {
   llvm::errs() << "deps=\"" << -1 << "\" ";
   llvm::errs() << "hasdep=\"" << 0 << "\" \\>\n";
 }
+
 void EmitXMLPass::runOnOperation() {
   ModuleOp m = getOperation();
 

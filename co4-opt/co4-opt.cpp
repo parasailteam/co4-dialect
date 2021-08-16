@@ -25,12 +25,14 @@
 
 #include "Co4LL/BufAlloc.h"
 #include "Co4LL/EmitXML.h"
+#include "Co4LL/LinkByGPUID.h"
 
 int main(int argc, char **argv) {
   mlir::registerAllPasses();
 
   registerBufAllocPass();
   registerEmitXMLPass();
+  registerLinkByGPUIDPass();
 
   mlir::DialectRegistry registry;
   registry.insert<mlir::co4ll::Co4LLDialect>();
