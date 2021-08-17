@@ -1,8 +1,8 @@
 add_mlir_dialect_library(MLIRCo4LL
+        BufAlloc.cpp
         Co4LLDialect.cpp
         Co4LLOps.cpp
         EmitXML.cpp
-        BufAlloc.cpp
         LinkByGPUID.cpp
 
         ADDITIONAL_HEADER_DIRS

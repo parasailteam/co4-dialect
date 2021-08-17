@@ -15,7 +15,7 @@ using namespace mlir;
 
 namespace {
 struct BufAllocPass final
-    : public PassWrapper<BufAllocPass, OperationPass<ModuleOp>> {
+    : public PassWrapper<BufAllocPass, OperationPass<co4ll::GPUOp>> {
 
   /// Make sure that we have a valid default constructor and copy constructor to
   /// ensure that the options are initialized properly.
@@ -118,35 +118,31 @@ bool BufAlloc::pickDst(Operation *op) {
 }
 
 void BufAllocPass::runOnOperation() {
-  ModuleOp m = getOperation();
-
-  for (auto &op : m.getOps()) {
-    co4ll::GPUOp gpu = cast<co4ll::GPUOp>(op);
-    for (auto &op : gpu.getOps()) {
-      co4ll::TBOp tb = cast<co4ll::TBOp>(op);
-      Region &r = tb.getRegion();
-      Block &b = r.front();
-      BufAlloc alloc{r.getNumArguments()};
-      for (BlockArgument &arg : r.getArguments()) {
-        alloc.setUsed(arg.getArgNumber(), !arg.use_empty());
-      }
-      bool changed = false;
-      do {
-        changed = false;
-        for (Operation &inst : llvm::reverse(b)) {
-          if (inst.getNumResults() == 0)
-            continue;
-          changed |=
-              TypeSwitch<Operation *, bool>(&inst)
-                  .Case<vector::ExtractStridedSliceOp>(
-                      [&](auto extract) { return false; })
-                  .Case<co4ll::ConcatOp>([&](co4ll::ConcatOp concat) {
-                    return propagateDsts(concat);
-                  })
-                  .Default([&](Operation *op) { return alloc.pickDst(op); });
-        }
-      } while (changed);
+  co4ll::GPUOp gpu = getOperation();
+  for (auto &op : gpu.getOps()) {
+    co4ll::TBOp tb = cast<co4ll::TBOp>(op);
+    Region &r = tb.getRegion();
+    Block &b = r.front();
+    BufAlloc alloc{r.getNumArguments()};
+    for (BlockArgument &arg : r.getArguments()) {
+      alloc.setUsed(arg.getArgNumber(), !arg.use_empty());
     }
+    bool changed = false;
+    do {
+      changed = false;
+      for (Operation &inst : llvm::reverse(b)) {
+        if (inst.getNumResults() == 0)
+          continue;
+        changed |=
+            TypeSwitch<Operation *, bool>(&inst)
+                .Case<vector::ExtractStridedSliceOp>(
+                    [&](auto extract) { return false; })
+                .Case<co4ll::ConcatOp>([&](co4ll::ConcatOp concat) {
+                  return propagateDsts(concat);
+                })
+                .Default([&](Operation *op) { return alloc.pickDst(op); });
+      }
+    } while (changed);
   }
 }
 
