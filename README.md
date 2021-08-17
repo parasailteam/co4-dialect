@@ -8,8 +8,8 @@ standalone `opt`-like tool to operate on those dialects.
 This setup assumes that you have built LLVM and MLIR in `$BUILD_DIR` and installed them to `$PREFIX`. To build and launch the tests, run
 ```sh
 mkdir build && cd build
-cmake -G Ninja .. -DMLIR_DIR=$PREFIX/lib/cmake/mlir -DLLVM_EXTERNAL_LIT=$BUILD_DIR/bin/llvm-lit
-cmake --build . --target check-co4-opt
+cmake -G Ninja .. -DMLIR_DIR=$PREFIX/lib/cmake/mlir -DLLVM_EXTERNAL_LIT=$BUILD_DIR/bin/llvm-lit -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+ninja -j8 check-co4-opt
 ```
 To build the documentation from the TableGen description of the dialects
 operations, run
