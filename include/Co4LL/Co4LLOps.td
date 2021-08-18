@@ -63,6 +63,13 @@ def TBOp : Co4LL_Op<"tb", [ HasParent<"GPUOp"> ]> {
   let results = (outs Variadic<VectorOfRank<[1]>>:$res);
 
   let verifier = [{ return ::verify(*this); }];
+
+  let extraClassDeclaration = [{
+    co4ll::ReturnOp getReturnOp() {
+      Operation *term = getRegion().front().getTerminator();
+      return llvm::dyn_cast<co4ll::ReturnOp>(term);
+    }
+  }];
 }
 
 // Adapted from standard dialect

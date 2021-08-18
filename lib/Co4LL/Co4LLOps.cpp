@@ -28,8 +28,7 @@ static LogicalResult verify(co4ll::ConcatOp op) {
 }
 
 static LogicalResult verify(co4ll::TBOp op) {
-  Operation* term = op.getRegion().front().getTerminator();
-  co4ll::ReturnOp ret = dyn_cast<co4ll::ReturnOp>(term);
+  co4ll::ReturnOp ret = op.getReturnOp();
   if (!ret)
     return op.emitOpError(
         "expects body to be single basic block terminating in co4ll.return op");

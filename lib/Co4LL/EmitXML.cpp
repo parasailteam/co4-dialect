@@ -55,10 +55,8 @@ std::tuple<int, int> mlir::co4ll::getBufferAndOffset(const Value v) {
       std::tie(dstbuf, dstoff) = getBufferAndOffset(extract.getOperand());
       dstoff += extract.offsets()[0].cast<IntegerAttr>().getInt();
     } else if (co4ll::TBOp producerTB = llvm::dyn_cast<co4ll::TBOp>(o.getOwner())) {
-      Operation *term = producerTB.getRegion().front().getTerminator();
-      co4ll::ReturnOp ret = llvm::cast<co4ll::ReturnOp>(term);
-      std::tie(dstbuf, dstoff) =
-          getBufferAndOffset(ret.getOperand(o.getResultNumber()));
+      std::tie(dstbuf, dstoff) = getBufferAndOffset(
+          producerTB.getReturnOp().getOperand(o.getResultNumber()));
     } else {
       IntegerAttr dstbufAttr =
           o.getOwner()->getAttrOfType<IntegerAttr>("dstbuf");
