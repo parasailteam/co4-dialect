@@ -41,7 +41,7 @@ struct StepEmitter {
 };
 } // end anonymous namespace
 
-std::tuple<int, int> mlir::co4ll::getDstBufferAndOffset(const Value v) {
+std::tuple<int, int> mlir::co4ll::getBufferAndOffset(const Value v) {
   if (const OpResult o = v.dyn_cast<OpResult>()) {
     int dstbuf, dstoff;
     if (vector::ExtractStridedSliceOp extract =
@@ -52,13 +52,13 @@ std::tuple<int, int> mlir::co4ll::getDstBufferAndOffset(const Value v) {
 
       assert(extract.offsets().size() == 1);
 
-      std::tie(dstbuf, dstoff) = getDstBufferAndOffset(extract.getOperand());
+      std::tie(dstbuf, dstoff) = getBufferAndOffset(extract.getOperand());
       dstoff += extract.offsets()[0].cast<IntegerAttr>().getInt();
     } else if (co4ll::TBOp producerTB = llvm::dyn_cast<co4ll::TBOp>(o.getOwner())) {
       Operation *term = producerTB.getRegion().front().getTerminator();
       co4ll::ReturnOp ret = llvm::cast<co4ll::ReturnOp>(term);
       std::tie(dstbuf, dstoff) =
-          getDstBufferAndOffset(ret.getOperand(o.getResultNumber()));
+          getBufferAndOffset(ret.getOperand(o.getResultNumber()));
     } else {
       IntegerAttr dstbufAttr =
           o.getOwner()->getAttrOfType<IntegerAttr>("dstbuf");
@@ -85,7 +85,7 @@ void StepEmitter::emitOp(Operation *inst, StringRef type) {
   unsigned numSources = inst->getNumOperands();
   int srcbuf, srcoff;
   if (numSources > 0)
-    std::tie(srcbuf, srcoff) = co4ll::getDstBufferAndOffset(inst->getOperand(0));
+    std::tie(srcbuf, srcoff) = co4ll::getBufferAndOffset(inst->getOperand(0));
   else
     // No meaningful source, but XML interpreter expects to parse at least
     // 1 src per instruction.
@@ -94,14 +94,14 @@ void StepEmitter::emitOp(Operation *inst, StringRef type) {
                << "srcoff=\"" << srcoff << "\" ";
   if (numSources > 1) {
     int srcbuf, srcoff;
-    std::tie(srcbuf, srcoff) = co4ll::getDstBufferAndOffset(inst->getOperand(1));
+    std::tie(srcbuf, srcoff) = co4ll::getBufferAndOffset(inst->getOperand(1));
     llvm::errs() << "src2buf=\"" << "a" << srcbuf << "\" "
                  << "src2off=\"" << srcoff << "\" ";
   }
 
   int dstbuf, dstoff;
   if (inst->getNumResults() >= 1)
-    std::tie(dstbuf, dstoff) = co4ll::getDstBufferAndOffset(inst->getResult(0));
+    std::tie(dstbuf, dstoff) = co4ll::getBufferAndOffset(inst->getResult(0));
   else
     // No meaningful destination, but XML interpreter expects to parse
     // 1 dst per instruction.
@@ -131,9 +131,11 @@ void EmitXMLPass::runOnOperation() {
     assert(gpuid && "gpuid attr missing");
     llvm::errs() << " <gpu id=\"" << gpuid.getInt()
                  << "\" i_chunks=\"1\" o_chunks=\"1\" s_chunks=\"1\" >\n";
+    unsigned tbid = 0;
     for (auto &op : gpu.getOps()) {
       co4ll::TBOp tb = cast<co4ll::TBOp>(op);
-      llvm::errs() << "  <tb id=\"0\" send=\"-1\" recv=\"-1\" chan=\"0\">\n";
+      llvm::errs() << "  <tb id=\"" << tbid++
+                   << "\" send=\"-1\" recv=\"-1\" chan=\"0\">\n";
       StepEmitter e;
       for (Operation &inst : tb.getOps()) {
         TypeSwitch<Operation *>(&inst)

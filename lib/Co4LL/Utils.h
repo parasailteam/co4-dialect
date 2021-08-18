@@ -5,6 +5,6 @@
 
 namespace mlir {
 namespace co4ll {
-std::tuple<int, int> getDstBufferAndOffset(const Value v);
+std::tuple<int, int> getBufferAndOffset(const Value v);
 }
 }
