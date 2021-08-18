@@ -1,9 +1,9 @@
-// RUN: co4-opt %s | co4-opt --co4-bufalloc | co4-opt | FileCheck %s
+// RUN: co4-opt %s | co4-opt  --co4-linkbygpuid --co4-threadblockssa --co4-bufalloc | co4-opt | FileCheck %s
 
 module {
   "co4ll.gpu"() ({
     // CHECK-LABEL: co4ll.tb
-    "co4ll.tb"() ({
+    %g1 = "co4ll.tb"() ({
       ^bb0 (  %a0 : vector<4xf32>,
               %a1 : vector<4xf32>,
               %a2 : vector<4xf32>,
@@ -54,8 +54,8 @@ module {
         %g1_2 = "co4ll.rcs"() : () -> (vector<1xf32>)
         %g1_1 = "co4ll.recv"() : () -> (vector<1xf32>)
         %g1 = "co4ll.concat"(%g1_0, %g1_1, %g1_2, %g1_3) { dstbuf=4:i64 , dstoff=0:i64 } : (vector<1xf32>, vector<1xf32>, vector<1xf32>, vector<1xf32>) -> (vector<4xf32>)
-        "co4ll.return"() : () -> ()
-    }) : () -> ()
+        "co4ll.return"(%g1) : (vector<4xf32>) -> ()
+    }) { localoutputs=["g1"] } : () -> (vector<4xf32>)
   }) { gpuid=0 } : () -> ()
   "co4ll.gpu"() ({
     // CHECK-LABEL: co4ll.tb
@@ -112,6 +112,6 @@ module {
         // w1 = w - update
         %w1   = std.subf %a1, %update              { dstbuf=7:i64 , dstoff=0:i64 } : vector<4xf32>
         "co4ll.return"(%w1) : (vector<4xf32>) -> ()
-    }) : () -> (vector<4xf32>)
+    }) { localinputs=[["g1",4]] } : () -> (vector<4xf32>)
   }) { gpuid=0 } : () -> ()
 }
