@@ -77,6 +77,48 @@ std::tuple<int, int> mlir::co4ll::getBufferAndOffset(const Value v) {
   }
 }
 
+static bool isEmittedAsXML(Operation *op) {
+  return !(isa<vector::ExtractStridedSliceOp>(op) || isa<co4ll::ConcatOp>(op) ||
+           isa<co4ll::ReturnOp>(op));
+}
+
+static bool isUsedByOtherTB(OpResult v) {
+  assert(!isa<co4ll::TBOp>(v.getOwner()));
+  co4ll::TBOp producerTB = llvm::cast<co4ll::TBOp>(v.getOwner()->getParentOp());
+  for (OpOperand& use : v.getUses()) {
+    Operation *user = use.getOwner();
+    assert(!isa<co4ll::TBOp>(user));
+    assert(user->getParentOp() == producerTB);
+    if (co4ll::ReturnOp ret = llvm::dyn_cast<co4ll::ReturnOp>(user)) {
+      Value sharedVal = producerTB->getResult(use.getOperandNumber());
+      for (Operation *user : sharedVal.getUsers()) {
+        assert(!isa<co4ll::TBOp>(user));
+        co4ll::TBOp userTB = llvm::cast<co4ll::TBOp>(user->getParentOp());
+        //llvm::errs() << "\n\n User: " << *user << "\n\nUsed: " << sharedVal
+        //             << "\n " << v << "\n\n";
+        assert(producerTB != userTB &&
+               "senseless for a TB to use its own returned value");
+        assert(producerTB->getParentOp() == userTB->getParentOp() &&
+               "only TBs within a single GPU can directly share local values");
+        return true;
+      }
+    }
+  }
+
+  // If the following instruction is a concat instruction producing a result
+  // used by another TB, then the current instruction should be treated as
+  // having a dependence, to ensure that at least one instruction emited to XML
+  // will have the hasdep attribute set to 1.
+  for (Operation *nextOp = v.getOwner()->getNextNode();
+       nextOp && !isEmittedAsXML(nextOp); nextOp = nextOp->getNextNode()) {
+    for (OpResult r : nextOp->getResults())
+      if (isUsedByOtherTB(r))
+        return true;
+  }
+
+  return false;
+}
+
 void StepEmitter::emitOp(Operation *inst, StringRef type) {
   llvm::errs() << "   <step s=\"" << stepcount++ << "\" "
                << "type=\"" << type << "\" ";
@@ -124,7 +166,11 @@ void StepEmitter::emitOp(Operation *inst, StringRef type) {
   // TODO: handle dependencies
   llvm::errs() << "depid=\"" << -1 << "\" ";
   llvm::errs() << "deps=\"" << -1 << "\" ";
-  llvm::errs() << "hasdep=\"" << 0 << "\" \\>\n";
+  llvm::errs() << "hasdep=\""
+               << (int)llvm::any_of(
+                      inst->getResults(),
+                      [](OpResult out) { return isUsedByOtherTB(out); })
+               << "\" \\>\n";
 }
 
 void EmitXMLPass::runOnOperation() {
@@ -144,6 +190,7 @@ void EmitXMLPass::runOnOperation() {
                    << "\" send=\"-1\" recv=\"-1\" chan=\"0\">\n";
       StepEmitter e;
       for (Operation &inst : tb.getOps()) {
+        if (!isEmittedAsXML(&inst)) continue;
         TypeSwitch<Operation *>(&inst)
             .Case<AddFOp>([&](auto addf) { e.emitOp(addf, "addf"); })
             .Case<SubFOp>([&](auto mulf) { e.emitOp(mulf, "subf"); })
@@ -157,9 +204,6 @@ void EmitXMLPass::runOnOperation() {
                 [&](auto send) { e.emitOp(send, "rrc"); })
             .Case<co4ll::RecvCopySendOp>(
                 [&](auto send) { e.emitOp(send, "rcs"); })
-            .Case<co4ll::ReturnOp>([&](auto) {})
-            .Case<vector::ExtractStridedSliceOp>([&](auto) {})
-            .Case<co4ll::ConcatOp>([&](auto) {})
             .Default([&](Operation *op) {
               llvm::errs() << "Unexpected instruction type:\n  " << *op << "\n";
             });
