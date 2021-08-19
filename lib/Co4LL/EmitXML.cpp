@@ -119,6 +119,48 @@ static bool isUsedByOtherTB(OpResult v) {
   return false;
 }
 
+static Operation* getUniqueDependencyFromOtherTB(Operation *op) {
+  OpResult dep;
+  co4ll::TBOp consumerTB = cast<co4ll::TBOp>(op->getParentOp());
+  for (Value in : op->getOperands())
+    if (const OpResult tbResult = in.dyn_cast<OpResult>())
+      if (tbResult.getOwner()->getParentOp() != consumerTB) {
+        assert(!dep && "We do not yet support one operation directly using "
+                       "multiple values produced in other TBs.");
+        dep = tbResult;
+      }
+
+  if (!dep) return nullptr;
+
+  co4ll::TBOp producerTB = cast<co4ll::TBOp>(dep.getOwner());
+  Value producer =
+      producerTB.getReturnOp().getOperand(dep.getResultNumber());
+  assert(!producer.isa<BlockArgument>() &&
+         "Threadblock returns a value that it did not produce?");
+  return producer.cast<OpResult>().getOwner();
+}
+
+static int getTBID(co4ll::TBOp tb) {
+  int count = 0;
+  for (auto &op : cast<co4ll::GPUOp>(tb->getParentOp()).getOps()) {
+    if (&op == tb)
+      return count;
+    count++;
+  }
+  llvm_unreachable("");
+}
+
+static int getStepWithinTB(Operation *op) {
+  int count = 0;
+  for (auto &o : cast<co4ll::TBOp>(op->getParentOp()).getOps()) {
+    if (&o == op)
+      return count;
+    if (isEmittedAsXML(&o))
+      count++;
+  }
+  llvm_unreachable("");
+}
+
 void StepEmitter::emitOp(Operation *inst, StringRef type) {
   llvm::errs() << "   <step s=\"" << stepcount++ << "\" "
                << "type=\"" << type << "\" ";
@@ -163,9 +205,12 @@ void StepEmitter::emitOp(Operation *inst, StringRef type) {
         "Don't know what to use for cnt if op has no operands nor results");
   }
 
-  // TODO: handle dependencies
-  llvm::errs() << "depid=\"" << -1 << "\" ";
-  llvm::errs() << "deps=\"" << -1 << "\" ";
+  Operation *dep = getUniqueDependencyFromOtherTB(inst);
+  llvm::errs() << "depid=\""
+               << (dep ? getTBID(cast<co4ll::TBOp>(dep->getParentOp())) : -1)
+               << "\" ";
+  llvm::errs() << "deps=\"" << (dep ? getStepWithinTB(dep) : -1) << "\" ";
+
   llvm::errs() << "hasdep=\""
                << (int)llvm::any_of(
                       inst->getResults(),
