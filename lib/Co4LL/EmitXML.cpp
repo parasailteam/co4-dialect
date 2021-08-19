@@ -97,6 +97,8 @@ void StepEmitter::emitOp(Operation *inst, StringRef type) {
                  << "src2off=\"" << srcoff << "\" ";
   }
 
+  assert(inst->getNumResults() <= 1);
+
   int dstbuf, dstoff;
   if (inst->getNumResults() >= 1)
     std::tie(dstbuf, dstoff) = co4ll::getBufferAndOffset(inst->getResult(0));
@@ -111,6 +113,12 @@ void StepEmitter::emitOp(Operation *inst, StringRef type) {
     ShapedType resultType = inst->getResult(0).getType().dyn_cast<ShapedType>();
     assert(resultType);
     llvm::errs() << "cnt=\"" << resultType.getNumElements() << "\" ";
+  } else if (numSources > 0) {
+    ShapedType sourceType = inst->getOperand(0).getType().dyn_cast<ShapedType>();
+    llvm::errs() << "cnt=\"" << sourceType.getNumElements() << "\" ";
+  } else {
+    llvm_unreachable(
+        "Don't know what to use for cnt if op has no operands nor results");
   }
 
   // TODO: handle dependencies
