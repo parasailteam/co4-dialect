@@ -20,6 +20,8 @@
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
 
+#include "Co4HL/Co4HLDialect.h"
+#include "Co4HL/Co4HLOpsDialect.cpp.inc"
 #include "Co4LL/Co4LLDialect.h"
 #include "Co4LL/Co4LLOpsDialect.cpp.inc"
 
@@ -38,6 +40,7 @@ int main(int argc, char **argv) {
 
   mlir::DialectRegistry registry;
   registry.insert<mlir::co4ll::Co4LLDialect>();
+  registry.insert<mlir::co4hl::Co4HLDialect>();
   registry.insert<mlir::StandardOpsDialect>();
   registry.insert<mlir::math::MathDialect>();
   registry.insert<mlir::vector::VectorDialect>();

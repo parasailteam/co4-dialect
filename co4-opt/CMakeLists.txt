@@ -4,6 +4,7 @@ set(LIBS
         ${dialect_libs}
         ${conversion_libs}
         MLIROptLib
+        MLIRCo4HL
         MLIRCo4LL
         )
 add_llvm_executable(co4-opt co4-opt.cpp)
