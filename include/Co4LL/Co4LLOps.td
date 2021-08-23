@@ -86,7 +86,7 @@ def ReturnOp : Co4LL_Op<"return", [NoSideEffect, HasParent<"TBOp">,
   let arguments = (ins Variadic<AnyType>:$operands);
 }
 
-def Co4LL_SendOp : Co4LL_Op<"send", [ ]> {
+def Co4LL_SendOp : Co4LL_Op<"send", [ HasParent<"TBOp"> ]> {
     let summary = "transmit data";
     let description = [{
         The `co4ll.send` operation consumes a local value and transmits it
@@ -96,7 +96,7 @@ def Co4LL_SendOp : Co4LL_Op<"send", [ ]> {
     let arguments = (ins VectorOfRank<[1]>:$input);
 }
 
-def Co4LL_RecvOp : Co4LL_Op<"recv", [ ]> {
+def Co4LL_RecvOp : Co4LL_Op<"recv", [ HasParent<"TBOp"> ]> {
     let summary = "receive data";
     let description = [{
         The `co4ll.recv` operation receives a value transmitted from the GPU
@@ -108,7 +108,7 @@ def Co4LL_RecvOp : Co4LL_Op<"recv", [ ]> {
     let results = (outs VectorOfRank<[1]>:$res);
 }
 
-def Co4LL_RecvReduceSendOp : Co4LL_Op<"rrs", [ ]> {
+def Co4LL_RecvReduceSendOp : Co4LL_Op<"rrs", [ HasParent<"TBOp"> ]> {
     let summary = "receives and reduces data, and transmits the result";
     let description = [{
         The `co4ll.rrs` operation consumes a local value, and also receives
@@ -123,7 +123,7 @@ def Co4LL_RecvReduceSendOp : Co4LL_Op<"rrs", [ ]> {
     let arguments = (ins VectorOfRank<[1]>:$input);
 }
 
-def Co4LL_RecvReduceCopyOp : Co4LL_Op<"rrc", [SameOperandsAndResultType]> {
+def Co4LL_RecvReduceCopyOp : Co4LL_Op<"rrc", [ SameOperandsAndResultType, HasParent<"TBOp"> ]> {
     let summary = "receives and reduces data";
     let description = [{
         The `co4ll.rrc` operation consumes a local value, and also receives
@@ -139,7 +139,7 @@ def Co4LL_RecvReduceCopyOp : Co4LL_Op<"rrc", [SameOperandsAndResultType]> {
     let results = (outs VectorOfRank<[1]>:$res);
 }
 
-def Co4LL_RecvCopySendOp : Co4LL_Op<"rcs", [ ]> {
+def Co4LL_RecvCopySendOp : Co4LL_Op<"rcs", [ HasParent<"TBOp"> ]> {
     let summary = "receive and transmit data without modifying it";
     let description = [{
         This is essentially a fused `co4ll.recv` and `co4ll.send`.
@@ -153,7 +153,7 @@ def Co4LL_RecvCopySendOp : Co4LL_Op<"rcs", [ ]> {
     let results = (outs VectorOfRank<[1]>:$res);
 }
 
-def Co4LL_ConcatOp : Co4LL_Op<"concat", [ ]> {
+def Co4LL_ConcatOp : Co4LL_Op<"concat", [ NoSideEffect, HasParent<"TBOp"> ]> {
     let summary = "concatenates 1-D vectors into a longer 1-D vector";
     let description = [{
     This variadic operation takes one or more input vectors and produces one output vector.
