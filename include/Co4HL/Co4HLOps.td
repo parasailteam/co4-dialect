@@ -41,4 +41,59 @@ def Co4HL_FooOp : Co4HL_Op<"foo", [NoSideEffect,
     }];
 }
 
+def CO4HL_AlgoOp : Co4HL_Op<"algo", [ HasParent<"ModuleOp">,
+  AffineScope, IsolatedFromAbove ]> {
+  let summary = "A container for a single basic block corresponding to a whole distributed algorithm";
+  let description = [{
+    This co4hl.algo op must have a single block that terminates in a co4hl.return op.
+  }];
+
+  let regions = (region SizedRegion<1>:$body);
+  let results = (outs Variadic<1DTensorOf<[AnyType]>>:$res);
+
+  let verifier = [{ return ::verify(*this); }];
+
+  let extraClassDeclaration = [{
+    co4hl::ReturnOp getReturnOp();
+  }];
+}
+
+// Adapted from standard dialect
+def Co4HL_ReturnOp : Co4HL_Op<"return", [NoSideEffect, HasParent<"AlgoOp">,
+                                MemRefsNormalizable, ReturnLike, Terminator]> {
+  let summary = "return operation";
+  let description = [{
+    The operation takes variable number of operands and produces no results.
+  }];
+
+  let arguments = (ins Variadic<AnyType>:$operands);
+}
+
+def Co4HL_AllReduceOp : Co4HL_Op<"all_reduce", [ NoSideEffect, SameOperandsAndResultType, HasParent<"AlgoOp"> ]> {
+    let summary = "AllReduce collective";
+    let description = [{
+    }];
+
+    let arguments = (ins 1DTensorOf<[AnyType]>:$operands);
+    let results = (outs 1DTensorOf<[AnyType]>:$res);
+}
+
+def Co4HL_ReduceScatterOp : Co4HL_Op<"reduce_scatter", [ NoSideEffect, HasParent<"AlgoOp"> ]> {
+    let summary = "ReduceScatter collective";
+    let description = [{
+    }];
+
+    let arguments = (ins 1DTensorOf<[AnyType]>:$operands);
+    let results = (outs 1DTensorOf<[AnyType]>:$res);
+}
+
+def Co4HL_AllGatherOp : Co4HL_Op<"all_gather", [ NoSideEffect, HasParent<"AlgoOp"> ]> {
+    let summary = "AllGather collective";
+    let description = [{
+    }];
+
+    let arguments = (ins 1DTensorOf<[AnyType]>:$operands);
+    let results = (outs 1DTensorOf<[AnyType]>:$res);
+}
+
 #endif // CO4HL_OPS
