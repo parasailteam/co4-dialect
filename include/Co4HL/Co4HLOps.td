@@ -49,6 +49,7 @@ def CO4HL_AlgoOp : Co4HL_Op<"algo", [ HasParent<"ModuleOp">,
   }];
 
   let regions = (region SizedRegion<1>:$body);
+  let arguments = (ins I64Attr:$numgpus, I64ArrayAttr:$argbufs);
   let results = (outs Variadic<1DTensorOf<[AnyType]>>:$res);
 
   let verifier = [{ return ::verify(*this); }];
@@ -74,7 +75,7 @@ def Co4HL_AllReduceOp : Co4HL_Op<"all_reduce", [ NoSideEffect, SameOperandsAndRe
     let description = [{
     }];
 
-    let arguments = (ins 1DTensorOf<[AnyType]>:$operands);
+    let arguments = (ins 1DTensorOf<[AnyType]>:$operands, StrAttr:$func, I64Attr:$dstbuf);
     let results = (outs 1DTensorOf<[AnyType]>:$res);
 }
 
@@ -83,7 +84,7 @@ def Co4HL_ReduceScatterOp : Co4HL_Op<"reduce_scatter", [ NoSideEffect, HasParent
     let description = [{
     }];
 
-    let arguments = (ins 1DTensorOf<[AnyType]>:$operands);
+    let arguments = (ins 1DTensorOf<[AnyType]>:$operands, StrAttr:$func, I64Attr:$dstbuf);
     let results = (outs 1DTensorOf<[AnyType]>:$res);
 }
 
@@ -92,7 +93,7 @@ def Co4HL_AllGatherOp : Co4HL_Op<"all_gather", [ NoSideEffect, HasParent<"AlgoOp
     let description = [{
     }];
 
-    let arguments = (ins 1DTensorOf<[AnyType]>:$operands);
+    let arguments = (ins 1DTensorOf<[AnyType]>:$operands, I64Attr:$dstbuf);
     let results = (outs 1DTensorOf<[AnyType]>:$res);
 }
 

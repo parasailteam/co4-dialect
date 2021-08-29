@@ -8,6 +8,7 @@
 
 #include "Co4LL/Co4LLOps.h"
 #include "Co4LL/Co4LLDialect.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/OpImplementation.h"
 
 using namespace mlir;

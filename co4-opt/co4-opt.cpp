@@ -25,6 +25,7 @@
 #include "Co4LL/Co4LLDialect.h"
 #include "Co4LL/Co4LLOpsDialect.cpp.inc"
 
+#include "Co4HL/Lower.h"
 #include "Co4LL/BufAlloc.h"
 #include "Co4LL/EmitXML.h"
 #include "Co4LL/LinkByGPUID.h"
@@ -33,6 +34,7 @@
 int main(int argc, char **argv) {
   mlir::registerAllPasses();
 
+  registerCo4LoweringPass();
   registerBufAllocPass();
   registerEmitXMLPass();
   registerLinkByGPUIDPass();
@@ -43,6 +45,7 @@ int main(int argc, char **argv) {
   registry.insert<mlir::co4hl::Co4HLDialect>();
   registry.insert<mlir::StandardOpsDialect>();
   registry.insert<mlir::math::MathDialect>();
+  registry.insert<mlir::tensor::TensorDialect>();
   registry.insert<mlir::vector::VectorDialect>();
   registry.insert<mlir::LLVM::LLVMDialect>();
   // Add the following to include *all* MLIR Core dialects, or selectively
