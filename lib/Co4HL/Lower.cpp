@@ -80,25 +80,24 @@ public:
     }
   }
 
-  void initNewThreadblock(Value v) {
-    assert(v.isa<OpResult>());
-    unsigned dstbuf = v.cast<OpResult>()
-                          .getOwner()
-                          ->getAttrOfType<IntegerAttr>("dstbuf")
-                          .getInt();
-    for (int gpuid = 0; gpuid < numGPUs; gpuid++) {
-      // TODO: set return value
-      builders[gpuid].create<co4ll::ReturnOp>(m.getLoc(), llvm::None);
-      co4ll::TBOp prevTB =
-          cast<co4ll::TBOp>(builders[gpuid].getBlock()->getParentOp());
-      builders[gpuid].setInsertionPointAfter(prevTB);
-      // TODO: set return type
-      co4ll::TBOp newTB = builders[gpuid].create<co4ll::TBOp>(m.getLoc(), llvm::None);
-      assert(newTB.getRegion().empty());
-      Block &b = newTB.getRegion().emplaceBlock();
-      builders[gpuid].setInsertionPoint(&b, b.begin());
-      threadblockArg(gpuid, v, dstbuf);
-    }
+  void initNewThreadblock(int gpuid, Value v, const Twine &argname,
+                          unsigned argbuf) {
+    // TODO: set return value
+    builders[gpuid].create<co4ll::ReturnOp>(m.getLoc(), llvm::None);
+    co4ll::TBOp prevTB =
+        cast<co4ll::TBOp>(builders[gpuid].getBlock()->getParentOp());
+    builders[gpuid].setInsertionPointAfter(prevTB);
+    // TODO: set return type
+    co4ll::TBOp newTB =
+        builders[gpuid].create<co4ll::TBOp>(m.getLoc(), llvm::None);
+    assert(newTB.getRegion().empty());
+    Block &b = newTB.getRegion().emplaceBlock();
+    builders[gpuid].setInsertionPoint(&b, b.begin());
+    threadblockArg(gpuid, v, argbuf);
+    newTB->setAttr("localinputs",
+                   builders[gpuid].getArrayAttr({builders[gpuid].getArrayAttr(
+                       {builders[gpuid].getStringAttr(argname),
+                        builders[gpuid].getI64IntegerAttr(argbuf)})}));
   }
 
 private:
@@ -180,6 +179,48 @@ void Co4LoweringPass::runOnOperation() {
 
   LoweringBuilder builder(algo.numgpus(), maxNumChunks, m);
 
+  unsigned uniqueOutputID = 0;
+
+  SmallVector<ModuleOp, 16> submodules;
+  for (Operation &op : m.body().getOps())
+    if (ModuleOp submodule = dyn_cast<ModuleOp>(&op))
+      submodules.push_back(submodule);
+  auto emitCollective = [&](StringRef collectiveName, Value oldVal) -> void {
+    assert(oldVal.isa<OpResult>());
+    unsigned dstbuf = oldVal.cast<OpResult>()
+                          .getOwner()
+                          ->getAttrOfType<IntegerAttr>("dstbuf")
+                          .getInt();
+    auto it = llvm::find_if(submodules, [&](ModuleOp submodule) {
+      StringAttr collectiveAttr =
+          submodule->getAttrOfType<StringAttr>("co4hl.collective");
+      assert(collectiveAttr && "nested module lacks co4hl.collective attribute");
+      return collectiveAttr.getValue() == collectiveName;
+    });
+    assert(it != submodules.end() &&
+           "Unable to find collective implementation");
+    ModuleOp submodule = *it;
+    for (Operation &gpu : submodule.body().getOps()) {
+      Operation *newGpu = gpu.clone();
+      algo->getBlock()->getOperations().insert(algo->getIterator(),
+                                               newGpu);
+      assert(gpu.getRegion(0).hasOneBlock());
+      Block &gpuBody = newGpu->getRegion(0).front();
+      assert(std::distance(gpuBody.begin(), gpuBody.end()) == 1);
+      co4ll::TBOp tb = cast<co4ll::TBOp>(&gpuBody.front());
+      Builder b(algo);
+      std::string uniqueOutputName;
+      llvm::raw_string_ostream os(uniqueOutputName);
+      os << collectiveName << "Output" << uniqueOutputID;
+      os.flush();
+      tb->setAttr("localoutputs",
+                  b.getArrayAttr({b.getStringAttr(uniqueOutputName)}));
+      builder.initNewThreadblock(cast<co4ll::GPUOp>(newGpu).gpuid(), oldVal,
+                                 uniqueOutputName, dstbuf);
+      uniqueOutputID++;
+    }
+  };
+
   for (auto &op : algo.getOps()) {
     TypeSwitch<Operation *>(&op)
         .Case<MulFOp>([&](auto mulf) {
@@ -194,12 +235,15 @@ void Co4LoweringPass::runOnOperation() {
         .Case<math::RsqrtOp>([&](auto rsqrt) {
           builder.create<math::RsqrtOp>(rsqrt, rsqrt.getOperand());
         })
-        .Case<co4hl::AllReduceOp>(
-            [&](auto ar) { builder.initNewThreadblock(ar.res()); })
-        .Case<co4hl::ReduceScatterOp>(
-            [&](auto ar) { builder.initNewThreadblock(ar.res()); })
-        .Case<co4hl::AllGatherOp>(
-            [&](auto ar) { builder.initNewThreadblock(ar.res()); })
+        .Case<co4hl::AllReduceOp>([&](auto ar) {
+          emitCollective("all_reduce", ar.res());
+        })
+        .Case<co4hl::ReduceScatterOp>([&](auto rs) {
+          emitCollective("reduce_scatter", rs.res());
+        })
+        .Case<co4hl::AllGatherOp>([&](auto ag) {
+          emitCollective("all_gather", ag.res());
+        })
         .Case<co4hl::ReturnOp>([&](auto ret) {
           // TODO: Set return value
           builder.create<co4ll::ReturnOp>(ret, llvm::None);
@@ -211,6 +255,8 @@ void Co4LoweringPass::runOnOperation() {
   }
 
   algo->erase();
+  for (ModuleOp submodule : submodules)
+    submodule->erase();
 }
 
 void registerCo4LoweringPass() {

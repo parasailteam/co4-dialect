@@ -1,4 +1,4 @@
-// RUN: co4-opt %s | co4-opt --co4-lower --co4-bufalloc | FileCheck %s
+// RUN: co4-opt %s | co4-opt --co4-lower --co4-linkbygpuid --co4-threadblockssa --co4-bufalloc | FileCheck %s
 
 module {
     "co4hl.algo"() ({
@@ -37,6 +37,242 @@ module {
         %w1   = std.subf %w, %update               { dstbuf=7:i64 , dstoff=0:i64 } : tensor<4xf32>
         "co4hl.return"() : () -> ()
     }) { numgpus=4, argbufs=[0,1,2,3,16,17,18,19,20,21,22]} : () -> ()
+
+
+
+  // Implementations of collectives:
+
+
+  module attributes{co4hl.collective="all_reduce"} {
+  "co4ll.gpu"() ({
+    %g1 = "co4ll.tb"() ({
+      ^bb0 (  %a0 : vector<4xf32> ) :
+        // g1 = AllReduce(g)
+        %g_0 = vector.extract_strided_slice %a0
+            { offsets = [0], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        %g_1 = vector.extract_strided_slice %a0
+            { offsets = [1], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        %g_2 = vector.extract_strided_slice %a0
+            { offsets = [2], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        %g_3 = vector.extract_strided_slice %a0
+            { offsets = [3], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        "co4ll.send"(%g_3) : (vector<1xf32>) -> ()
+        "co4ll.rrs"(%g_2) : (vector<1xf32>) -> ()
+        "co4ll.rrs"(%g_1) : (vector<1xf32>) -> ()
+        %g1_0 = "co4ll.rrc"(%g_0) : (vector<1xf32>) -> (vector<1xf32>)
+        "co4ll.send"(%g1_0) : (vector<1xf32>) -> ()
+        %g1_3 = "co4ll.rcs"() : () -> (vector<1xf32>)
+        %g1_2 = "co4ll.rcs"() : () -> (vector<1xf32>)
+        %g1_1 = "co4ll.recv"() : () -> (vector<1xf32>)
+        %g1 = "co4ll.concat"(%g1_0, %g1_1, %g1_2, %g1_3) { dstbuf=4:i64 , dstoff=0:i64 } : (vector<1xf32>, vector<1xf32>, vector<1xf32>, vector<1xf32>) -> (vector<4xf32>)
+        "co4ll.return"(%g1) : (vector<4xf32>) -> ()
+    }) : () -> (vector<4xf32>)
+  }) { gpuid=0 } : () -> ()
+  "co4ll.gpu"() ({
+    %g1 = "co4ll.tb"() ({
+      ^bb0 (  %a0 : vector<4xf32> ) :
+        // g1 = AllReduce(g)
+        %g_0 = vector.extract_strided_slice %a0
+            { offsets = [0], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        %g_1 = vector.extract_strided_slice %a0
+            { offsets = [1], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        %g_2 = vector.extract_strided_slice %a0
+            { offsets = [2], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        %g_3 = vector.extract_strided_slice %a0
+            { offsets = [3], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        "co4ll.send"(%g_0) : (vector<1xf32>) -> ()
+        "co4ll.rrs"(%g_3) : (vector<1xf32>) -> ()
+        "co4ll.rrs"(%g_2) : (vector<1xf32>) -> ()
+        %g1_1 = "co4ll.rrc"(%g_1) : (vector<1xf32>) -> (vector<1xf32>)
+        "co4ll.send"(%g1_1) : (vector<1xf32>) -> ()
+        %g1_0 = "co4ll.rcs"() : () -> (vector<1xf32>)
+        %g1_3 = "co4ll.rcs"() : () -> (vector<1xf32>)
+        %g1_2 = "co4ll.recv"() : () -> (vector<1xf32>)
+        %g1 = "co4ll.concat"(%g1_0, %g1_1, %g1_2, %g1_3) { dstbuf=4:i64 , dstoff=0:i64 } : (vector<1xf32>, vector<1xf32>, vector<1xf32>, vector<1xf32>) -> (vector<4xf32>)
+        "co4ll.return"(%g1) : (vector<4xf32>) -> ()
+    }) : () -> (vector<4xf32>)
+  }) { gpuid=1 } : () -> ()
+  "co4ll.gpu"() ({
+    %g1 = "co4ll.tb"() ({
+      ^bb0 (  %a0 : vector<4xf32> ) :
+        // g1 = AllReduce(g)
+        %g_0 = vector.extract_strided_slice %a0
+            { offsets = [0], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        %g_1 = vector.extract_strided_slice %a0
+            { offsets = [1], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        %g_2 = vector.extract_strided_slice %a0
+            { offsets = [2], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        %g_3 = vector.extract_strided_slice %a0
+            { offsets = [3], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        "co4ll.send"(%g_1) : (vector<1xf32>) -> ()
+        "co4ll.rrs"(%g_0) : (vector<1xf32>) -> ()
+        "co4ll.rrs"(%g_3) : (vector<1xf32>) -> ()
+        %g1_2 = "co4ll.rrc"(%g_2) : (vector<1xf32>) -> (vector<1xf32>)
+        "co4ll.send"(%g1_2) : (vector<1xf32>) -> ()
+        %g1_1 = "co4ll.rcs"() : () -> (vector<1xf32>)
+        %g1_0 = "co4ll.rcs"() : () -> (vector<1xf32>)
+        %g1_3 = "co4ll.recv"() : () -> (vector<1xf32>)
+        %g1 = "co4ll.concat"(%g1_0, %g1_1, %g1_2, %g1_3) { dstbuf=4:i64 , dstoff=0:i64 } : (vector<1xf32>, vector<1xf32>, vector<1xf32>, vector<1xf32>) -> (vector<4xf32>)
+        "co4ll.return"(%g1) : (vector<4xf32>) -> ()
+    }) : () -> (vector<4xf32>)
+  }) { gpuid=2 } : () -> ()
+  "co4ll.gpu"() ({
+    %g1 = "co4ll.tb"() ({
+      ^bb0 (  %a0 : vector<4xf32> ) :
+        // g1 = AllReduce(g)
+        %g_0 = vector.extract_strided_slice %a0
+            { offsets = [0], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        %g_1 = vector.extract_strided_slice %a0
+            { offsets = [1], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        %g_2 = vector.extract_strided_slice %a0
+            { offsets = [2], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        %g_3 = vector.extract_strided_slice %a0
+            { offsets = [3], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        "co4ll.send"(%g_2) : (vector<1xf32>) -> ()
+        "co4ll.rrs"(%g_1) : (vector<1xf32>) -> ()
+        "co4ll.rrs"(%g_0) : (vector<1xf32>) -> ()
+        %g1_3 = "co4ll.rrc"(%g_3) : (vector<1xf32>) -> (vector<1xf32>)
+        "co4ll.send"(%g1_3) : (vector<1xf32>) -> ()
+        %g1_2 = "co4ll.rcs"() : () -> (vector<1xf32>)
+        %g1_1 = "co4ll.rcs"() : () -> (vector<1xf32>)
+        %g1_0 = "co4ll.recv"() : () -> (vector<1xf32>)
+        %g1 = "co4ll.concat"(%g1_0, %g1_1, %g1_2, %g1_3) { dstbuf=4:i64 , dstoff=0:i64 } : (vector<1xf32>, vector<1xf32>, vector<1xf32>, vector<1xf32>) -> (vector<4xf32>)
+        "co4ll.return"(%g1) : (vector<4xf32>) -> ()
+    }) : () -> (vector<4xf32>)
+  }) { gpuid=3 } : () -> ()
+  }
+
+
+  module attributes{co4hl.collective="reduce_scatter"} {
+  "co4ll.gpu"() ({
+    %g1_0 = "co4ll.tb"() ({
+      ^bb0 (  %a0 : vector<4xf32> ) :
+        %g_0 = vector.extract_strided_slice %a0
+            { offsets = [0], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        %g_1 = vector.extract_strided_slice %a0
+            { offsets = [1], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        %g_2 = vector.extract_strided_slice %a0
+            { offsets = [2], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        %g_3 = vector.extract_strided_slice %a0
+            { offsets = [3], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        "co4ll.send"(%g_3) : (vector<1xf32>) -> ()
+        "co4ll.rrs"(%g_2) : (vector<1xf32>) -> ()
+        "co4ll.rrs"(%g_1) : (vector<1xf32>) -> ()
+        %g1_0 = "co4ll.rrc"(%g_0) : (vector<1xf32>) -> (vector<1xf32>)
+        "co4ll.return"(%g1_0) : (vector<1xf32>) -> ()
+    }) : () -> (vector<1xf32>)
+  }) { gpuid=0 } : () -> ()
+  "co4ll.gpu"() ({
+    %g1_0 = "co4ll.tb"() ({
+      ^bb0 (  %a0 : vector<4xf32> ) :
+        %g_0 = vector.extract_strided_slice %a0
+            { offsets = [0], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        %g_1 = vector.extract_strided_slice %a0
+            { offsets = [1], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        %g_2 = vector.extract_strided_slice %a0
+            { offsets = [2], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        %g_3 = vector.extract_strided_slice %a0
+            { offsets = [3], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        "co4ll.send"(%g_0) : (vector<1xf32>) -> ()
+        "co4ll.rrs"(%g_3) : (vector<1xf32>) -> ()
+        "co4ll.rrs"(%g_2) : (vector<1xf32>) -> ()
+        %g1_1 = "co4ll.rrc"(%g_1) : (vector<1xf32>) -> (vector<1xf32>)
+        "co4ll.return"(%g1_1) : (vector<1xf32>) -> ()
+    }) : () -> (vector<1xf32>)
+  }) { gpuid=1 } : () -> ()
+  "co4ll.gpu"() ({
+    %g1_2 = "co4ll.tb"() ({
+      ^bb0 (  %a0 : vector<4xf32> ) :
+        %g_0 = vector.extract_strided_slice %a0
+            { offsets = [0], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        %g_1 = vector.extract_strided_slice %a0
+            { offsets = [1], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        %g_2 = vector.extract_strided_slice %a0
+            { offsets = [2], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        %g_3 = vector.extract_strided_slice %a0
+            { offsets = [3], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        "co4ll.send"(%g_1) : (vector<1xf32>) -> ()
+        "co4ll.rrs"(%g_0) : (vector<1xf32>) -> ()
+        "co4ll.rrs"(%g_3) : (vector<1xf32>) -> ()
+        %g1_2 = "co4ll.rrc"(%g_2) : (vector<1xf32>) -> (vector<1xf32>)
+        "co4ll.return"(%g1_2) : (vector<1xf32>) -> ()
+    }) : () -> (vector<1xf32>)
+  }) { gpuid=2 } : () -> ()
+  "co4ll.gpu"() ({
+    %g1_3 = "co4ll.tb"() ({
+      ^bb0 (  %a0 : vector<4xf32> ) :
+        %g_0 = vector.extract_strided_slice %a0
+            { offsets = [0], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        %g_1 = vector.extract_strided_slice %a0
+            { offsets = [1], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        %g_2 = vector.extract_strided_slice %a0
+            { offsets = [2], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        %g_3 = vector.extract_strided_slice %a0
+            { offsets = [3], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        "co4ll.send"(%g_2) : (vector<1xf32>) -> ()
+        "co4ll.rrs"(%g_1) : (vector<1xf32>) -> ()
+        "co4ll.rrs"(%g_0) : (vector<1xf32>) -> ()
+        %g1_3 = "co4ll.rrc"(%g_3) : (vector<1xf32>) -> (vector<1xf32>)
+        "co4ll.return"(%g1_3) : (vector<1xf32>) -> ()
+    }) : () -> (vector<1xf32>)
+  }) { gpuid=3 } : () -> ()
+  }
+
+
+  module attributes{co4hl.collective="all_gather"} {
+  "co4ll.gpu"() ({
+    %g1 = "co4ll.tb"() ({
+      ^bb0 (  %a0 : vector<4xf32> ) :
+        %g1_0 = vector.extract_strided_slice %a0
+            { offsets = [0], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        "co4ll.send"(%g1_0) : (vector<1xf32>) -> ()
+        %g1_3 = "co4ll.rcs"() : () -> (vector<1xf32>)
+        %g1_2 = "co4ll.rcs"() : () -> (vector<1xf32>)
+        %g1_1 = "co4ll.recv"() : () -> (vector<1xf32>)
+        %g1 = "co4ll.concat"(%g1_0, %g1_1, %g1_2, %g1_3) { dstbuf=4:i64 , dstoff=0:i64 } : (vector<1xf32>, vector<1xf32>, vector<1xf32>, vector<1xf32>) -> (vector<4xf32>)
+        "co4ll.return"(%g1) : (vector<4xf32>) -> ()
+    }) : () -> (vector<4xf32>)
+  }) { gpuid=0 } : () -> ()
+  "co4ll.gpu"() ({
+    %g1 = "co4ll.tb"() ({
+      ^bb0 (  %a0 : vector<4xf32> ) :
+        %g1_1 = vector.extract_strided_slice %a0
+            { offsets = [1], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        "co4ll.send"(%g1_1) : (vector<1xf32>) -> ()
+        %g1_0 = "co4ll.rcs"() : () -> (vector<1xf32>)
+        %g1_3 = "co4ll.rcs"() : () -> (vector<1xf32>)
+        %g1_2 = "co4ll.recv"() : () -> (vector<1xf32>)
+        %g1 = "co4ll.concat"(%g1_0, %g1_1, %g1_2, %g1_3) { dstbuf=4:i64 , dstoff=0:i64 } : (vector<1xf32>, vector<1xf32>, vector<1xf32>, vector<1xf32>) -> (vector<4xf32>)
+        "co4ll.return"(%g1) : (vector<4xf32>) -> ()
+    }) : () -> (vector<4xf32>)
+  }) { gpuid=1 } : () -> ()
+  "co4ll.gpu"() ({
+    %g1 = "co4ll.tb"() ({
+      ^bb0 (  %a0 : vector<4xf32> ) :
+        %g1_2 = vector.extract_strided_slice %a0
+            { offsets = [2], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        "co4ll.send"(%g1_2) : (vector<1xf32>) -> ()
+        %g1_1 = "co4ll.rcs"() : () -> (vector<1xf32>)
+        %g1_0 = "co4ll.rcs"() : () -> (vector<1xf32>)
+        %g1_3 = "co4ll.recv"() : () -> (vector<1xf32>)
+        %g1 = "co4ll.concat"(%g1_0, %g1_1, %g1_2, %g1_3) { dstbuf=4:i64 , dstoff=0:i64 } : (vector<1xf32>, vector<1xf32>, vector<1xf32>, vector<1xf32>) -> (vector<4xf32>)
+        "co4ll.return"(%g1) : (vector<4xf32>) -> ()
+    }) : () -> (vector<4xf32>)
+  }) { gpuid=2 } : () -> ()
+  "co4ll.gpu"() ({
+    %g1 = "co4ll.tb"() ({
+      ^bb0 (  %a0 : vector<4xf32> ) :
+        %g1_3 = vector.extract_strided_slice %a0
+            { offsets = [3], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+        "co4ll.send"(%g1_3) : (vector<1xf32>) -> ()
+        %g1_2 = "co4ll.rcs"() : () -> (vector<1xf32>)
+        %g1_1 = "co4ll.rcs"() : () -> (vector<1xf32>)
+        %g1_0 = "co4ll.recv"() : () -> (vector<1xf32>)
+        %g1 = "co4ll.concat"(%g1_0, %g1_1, %g1_2, %g1_3) { dstbuf=4:i64 , dstoff=0:i64 } : (vector<1xf32>, vector<1xf32>, vector<1xf32>, vector<1xf32>) -> (vector<4xf32>)
+        "co4ll.return"(%g1) : (vector<4xf32>) -> ()
+    }) : () -> (vector<4xf32>)
+  }) { gpuid=3 } : () -> ()
+  }
     // CHECK-LABEL: co4ll.gpu
     // CHECK-LABEL: co4ll.gpu
     // CHECK-LABEL: co4ll.gpu

@@ -49,14 +49,8 @@ def GPUOp : Co4LL_Op<"gpu", [ HasParent<"ModuleOp">,
     TODO: Write a longer description here.
   }];
 
+  let arguments = (ins I64Attr:$gpuid);
   let regions = (region SizedRegion<1>:$body);
-
-  let builders = [
-    OpBuilder<(ins "int":$gpuid), [{
-      build($_builder, $_state);
-      $_state.addAttribute("gpuid", $_builder.getI64IntegerAttr(gpuid));
-    }]>
-  ];
 }
 
 def TBOp : Co4LL_Op<"tb", [ HasParent<"GPUOp"> ]> {
