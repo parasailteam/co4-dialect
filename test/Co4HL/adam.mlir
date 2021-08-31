@@ -37,5 +37,5 @@ module {
         // w1 = w - update
         %w1   = std.subf %w, %update               { dstbuf=7:i64 , dstoff=0:i64 } : tensor<?xf32>
         "co4hl.return"() : () -> ()
-    }) { numgpus=4, argbufs=[0,1,2,3,16,17,18,19,20,21,22]} : () -> ()
+    }) { numgpus=4, numbufs=32, argbufs=[0,1,2,3,16,17,18,19,20,21,22]} : () -> ()
 }

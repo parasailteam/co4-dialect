@@ -41,16 +41,20 @@ struct Co4LoweringPass final
 
 class LoweringBuilder final {
   const int numGPUs;
+  const unsigned numBuffers;
   const int maxNumChunks;
   ModuleOp m;
   MLIRContext *const ctx;
+  const Type elemTy;
   SmallVector<mlir::OpBuilder, 16> builders;
   SmallVector<co4ll::GPUOp, 16> gpus;
   SmallVector<DenseMap<Value, Value>, 16> valueMaps;
 
 public:
-  LoweringBuilder(int numGPUs, int maxNumChunks, ModuleOp m)
-      : numGPUs(numGPUs), maxNumChunks(maxNumChunks), m(m), ctx(m->getContext()),
+  LoweringBuilder(int numGPUs, unsigned numBuffers, int maxNumChunks,
+                  ModuleOp m)
+      : numGPUs(numGPUs), numBuffers(numBuffers), maxNumChunks(maxNumChunks),
+        m(m), ctx(m->getContext()), elemTy(FloatType::getF32(ctx)),
         valueMaps(numGPUs) {
     mlir::OpBuilder b(ctx);
     b.setInsertionPointToEnd(&m.getRegion().back());
@@ -64,6 +68,9 @@ public:
       co4ll::TBOp tb = builders.back().create<co4ll::TBOp>(m.getLoc(), llvm::None);
       assert(tb.getRegion().empty());
       Block &b = tb.getRegion().emplaceBlock();
+      VectorType loweredArgTy = VectorType::get({maxNumChunks}, elemTy);
+      while (b.getNumArguments() < numBuffers)
+        b.addArgument(loweredArgTy);
       builders.back().setInsertionPoint(&b, b.begin());
     }
   }
@@ -92,37 +99,49 @@ public:
         builders[gpuid].create<co4ll::TBOp>(m.getLoc(), llvm::None);
     assert(newTB.getRegion().empty());
     Block &b = newTB.getRegion().emplaceBlock();
+    VectorType loweredArgTy = VectorType::get({maxNumChunks}, elemTy);
+    while (b.getNumArguments() < numBuffers)
+      b.addArgument(loweredArgTy);
     builders[gpuid].setInsertionPoint(&b, b.begin());
-    threadblockArg(gpuid, v, argbuf);
-    newTB->setAttr("localinputs",
-                   builders[gpuid].getArrayAttr({builders[gpuid].getArrayAttr(
-                       {builders[gpuid].getStringAttr(argname),
-                        builders[gpuid].getI64IntegerAttr(argbuf)})}));
+    BlockArgument newArg = threadblockArg(gpuid, v).cast<BlockArgument>();
+    newTB->setAttr(
+        "localinputs",
+        builders[gpuid].getArrayAttr({builders[gpuid].getArrayAttr(
+            {builders[gpuid].getStringAttr(argname),
+             builders[gpuid].getI64IntegerAttr(newArg.getArgNumber())})}));
   }
 
 private:
   void initGPUs() {
   }
 
-  Value threadblockArg(int gpuid, Value oldVal, unsigned argbuf) {
+  Value threadblockArg(int gpuid, Value oldVal, unsigned argbuf=UINT_MAX) {
+    const int chunks = oldVal.getType().cast<ShapedType>().getNumElements();
+    assert(elemTy == oldVal.getType().cast<ShapedType>().getElementType());
     Block& threadblock = *builders[gpuid].getBlock();
-    VectorType loweredArgTy = VectorType::get({maxNumChunks}, FloatType::getF32(ctx));
-    while (argbuf >= threadblock.getNumArguments())
-      threadblock.addArgument(loweredArgTy);
-    BlockArgument newArg = threadblock.getArgument(argbuf);
-
-    int chunks = oldVal.getType().cast<ShapedType>().getNumElements();
-    Value newVal = newArg;
-    if (chunks < maxNumChunks) {
-      size_t dim = 1;
-      SmallVector<int64_t> offsets(dim, 0);
-      SmallVector<int64_t> sizes(dim, chunks);
-      SmallVector<int64_t> strides(dim, 1);
-      newVal = builders[gpuid]
-                   .create<vector::ExtractStridedSliceOp>(
-                       oldVal.getLoc(), newArg, offsets, sizes, strides)
-                   .getResult();
+    Value newVal;
+    if (argbuf < numBuffers) {
+      // This arg refers to one of the buffers based on its index within the
+      // list of args
+      BlockArgument newArg = threadblock.getArgument(argbuf);
+      newVal = newArg;
+      if (chunks < maxNumChunks) {
+        size_t dim = 1;
+        SmallVector<int64_t> offsets(dim, 0);
+        SmallVector<int64_t> sizes(dim, chunks);
+        SmallVector<int64_t> strides(dim, 1);
+        newVal = builders[gpuid]
+                     .create<vector::ExtractStridedSliceOp>(
+                         oldVal.getLoc(), newArg, offsets, sizes, strides)
+                     .getResult();
+      }
+    } else {
+      // For communication between threadblocks, avoid the need for an
+      // extract_strided_slice op when we want to directly communicate
+      // a smaller number of chunks than a whole buffer
+      newVal = threadblock.addArgument(VectorType::get({chunks}, elemTy));
     }
+
     valueMaps[gpuid][oldVal] = newVal;
     return newVal;
   }
@@ -177,7 +196,7 @@ void Co4LoweringPass::runOnOperation() {
     return;
   assert(maxNumChunks > 0 && "No tensor values found in algo?");
 
-  LoweringBuilder builder(algo.numgpus(), maxNumChunks, m);
+  LoweringBuilder builder(algo.numgpus(), algo.numbufs(), maxNumChunks, m);
 
   unsigned uniqueOutputID = 0;
 

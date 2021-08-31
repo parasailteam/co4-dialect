@@ -49,7 +49,7 @@ def CO4HL_AlgoOp : Co4HL_Op<"algo", [ HasParent<"ModuleOp">,
   }];
 
   let regions = (region SizedRegion<1>:$body);
-  let arguments = (ins I64Attr:$numgpus, I64ArrayAttr:$argbufs);
+  let arguments = (ins I64Attr:$numgpus, I64Attr:$numbufs, I64ArrayAttr:$argbufs);
   let results = (outs Variadic<1DTensorOf<[AnyType]>>:$res);
 
   let verifier = [{ return ::verify(*this); }];
