@@ -125,7 +125,7 @@ static Operation* getUniqueDependencyFromOtherTB(Operation *op) {
   for (Value in : op->getOperands())
     if (const OpResult tbResult = in.dyn_cast<OpResult>())
       if (tbResult.getOwner()->getParentOp() != consumerTB) {
-        assert(!dep && "We do not yet support one operation directly using "
+        assert(!dep && "TODO: add support for when one operation directly uses "
                        "multiple values produced in other TBs.");
         dep = tbResult;
       }
@@ -153,10 +153,10 @@ static int getTBID(co4ll::TBOp tb) {
 static int getStepWithinTB(Operation *op) {
   int count = 0;
   for (auto &o : cast<co4ll::TBOp>(op->getParentOp()).getOps()) {
-    if (&o == op)
-      return count;
     if (isEmittedAsXML(&o))
       count++;
+    if (&o == op)
+      return count - 1;
   }
   llvm_unreachable("");
 }
