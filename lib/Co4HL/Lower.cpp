@@ -46,9 +46,19 @@ class LoweringBuilder final {
   ModuleOp m;
   MLIRContext *const ctx;
   const Type elemTy;
-  SmallVector<mlir::OpBuilder, 16> builders;
+
+  // These following parallel vectors will hold one element per rank
   SmallVector<co4ll::GPUOp, 16> gpus;
+  SmallVector<mlir::OpBuilder, 16> builders;
+  // map from old values in algo to new values in generated threadblocks.
   SmallVector<DenseMap<Value, Value>, 16> valueMaps;
+
+  // A collection of possible implementations of collectives.
+  // TODO: replace this with some more flexible SCCL/ncclize-type compilation
+  // that can generate appropriate implementations on the fly?
+  SmallVector<ModuleOp, 16> submodules;
+
+  unsigned uniqueOutputID = 0;
 
 public:
   LoweringBuilder(int numGPUs, unsigned numBuffers, int maxNumChunks,
@@ -75,6 +85,16 @@ public:
     }
   }
 
+  void addSubmodule(ModuleOp submodule) {
+    submodules.push_back(submodule);
+  }
+
+  void eraseSubmodules() {
+    for (ModuleOp submodule : submodules)
+      submodule->erase();
+  }
+
+  // Emit an operation performing computation (not inter-GPU communication)
   template <class Type, class... Args>
   void create(Operation *OldOp, Args... args) {
     for (int gpuid = 0; gpuid < numGPUs; gpuid++) {
@@ -84,6 +104,38 @@ public:
       assert(NewOp->getNumResults() == OldOp->getNumResults());
       for (unsigned i = 0; i < NewOp->getNumResults(); i++)
         valueMaps[gpuid][OldOp->getResult(i)] = NewOp->getResult(i);
+    }
+  }
+
+  // Emit a collective, which performs inter-GPU communication
+  void emitCollective(StringRef collectiveName, Value oldVal) {
+    assert(oldVal.isa<OpResult>());
+    auto it = llvm::find_if(submodules, [&](ModuleOp submodule) {
+      StringAttr collectiveAttr =
+          submodule->getAttrOfType<StringAttr>("co4hl.collective");
+      assert(collectiveAttr && "nested module lacks co4hl.collective attribute");
+      return collectiveAttr.getValue() == collectiveName;
+    });
+    assert(it != submodules.end() &&
+           "Unable to find collective implementation");
+    ModuleOp submodule = *it;
+    for (Operation &gpu : submodule.body().getOps()) {
+      Operation *newGpu = gpu.clone();
+      m.body().back().getOperations().insert(m.body().back().end(), newGpu);
+      assert(gpu.getRegion(0).hasOneBlock());
+      Block &gpuBody = newGpu->getRegion(0).front();
+      assert(std::distance(gpuBody.begin(), gpuBody.end()) == 1);
+      co4ll::TBOp tb = cast<co4ll::TBOp>(&gpuBody.front());
+      const int gpuid = cast<co4ll::GPUOp>(newGpu).gpuid();
+      Builder& b = builders[gpuid];
+      std::string uniqueOutputName;
+      llvm::raw_string_ostream os(uniqueOutputName);
+      os << collectiveName << "Output" << uniqueOutputID;
+      os.flush();
+      tb->setAttr("localoutputs",
+                  b.getArrayAttr({b.getStringAttr(uniqueOutputName)}));
+      initNewThreadblock(gpuid, oldVal, uniqueOutputName);
+      uniqueOutputID++;
     }
   }
 
@@ -97,11 +149,11 @@ public:
     co4ll::TBOp newTB =
         builders[gpuid].create<co4ll::TBOp>(m.getLoc(), llvm::None);
     assert(newTB.getRegion().empty());
-    Block &b = newTB.getRegion().emplaceBlock();
+    Block &newTBBlock = newTB.getRegion().emplaceBlock();
     VectorType loweredArgTy = VectorType::get({maxNumChunks}, elemTy);
-    while (b.getNumArguments() < numBuffers)
-      b.addArgument(loweredArgTy);
-    builders[gpuid].setInsertionPoint(&b, b.begin());
+    while (newTBBlock.getNumArguments() < numBuffers)
+      newTBBlock.addArgument(loweredArgTy);
+    builders[gpuid].setInsertionPoint(&newTBBlock, newTBBlock.begin());
     const int chunks = v.getType().cast<ShapedType>().getNumElements();
     assert(elemTy == v.getType().cast<ShapedType>().getElementType());
     Block &threadblock = *builders[gpuid].getBlock();
@@ -190,43 +242,10 @@ void Co4LoweringPass::runOnOperation() {
 
   LoweringBuilder builder(algo.numgpus(), algo.numbufs(), maxNumChunks, m);
 
-  unsigned uniqueOutputID = 0;
-
-  SmallVector<ModuleOp, 16> submodules;
+  // Collect a "library" of implementations for collectives
   for (Operation &op : m.body().getOps())
     if (ModuleOp submodule = dyn_cast<ModuleOp>(&op))
-      submodules.push_back(submodule);
-  auto emitCollective = [&](StringRef collectiveName, Value oldVal) -> void {
-    assert(oldVal.isa<OpResult>());
-    auto it = llvm::find_if(submodules, [&](ModuleOp submodule) {
-      StringAttr collectiveAttr =
-          submodule->getAttrOfType<StringAttr>("co4hl.collective");
-      assert(collectiveAttr && "nested module lacks co4hl.collective attribute");
-      return collectiveAttr.getValue() == collectiveName;
-    });
-    assert(it != submodules.end() &&
-           "Unable to find collective implementation");
-    ModuleOp submodule = *it;
-    for (Operation &gpu : submodule.body().getOps()) {
-      Operation *newGpu = gpu.clone();
-      algo->getBlock()->getOperations().insert(algo->getIterator(),
-                                               newGpu);
-      assert(gpu.getRegion(0).hasOneBlock());
-      Block &gpuBody = newGpu->getRegion(0).front();
-      assert(std::distance(gpuBody.begin(), gpuBody.end()) == 1);
-      co4ll::TBOp tb = cast<co4ll::TBOp>(&gpuBody.front());
-      Builder b(algo);
-      std::string uniqueOutputName;
-      llvm::raw_string_ostream os(uniqueOutputName);
-      os << collectiveName << "Output" << uniqueOutputID;
-      os.flush();
-      tb->setAttr("localoutputs",
-                  b.getArrayAttr({b.getStringAttr(uniqueOutputName)}));
-      builder.initNewThreadblock(cast<co4ll::GPUOp>(newGpu).gpuid(), oldVal,
-                                 uniqueOutputName);
-      uniqueOutputID++;
-    }
-  };
+      builder.addSubmodule(submodule);
 
   for (auto &op : algo.getOps()) {
     TypeSwitch<Operation *>(&op)
@@ -243,13 +262,13 @@ void Co4LoweringPass::runOnOperation() {
           builder.create<math::RsqrtOp>(rsqrt, rsqrt.getOperand());
         })
         .Case<co4hl::AllReduceOp>([&](auto ar) {
-          emitCollective("all_reduce", ar.res());
+          builder.emitCollective("all_reduce", ar.res());
         })
         .Case<co4hl::ReduceScatterOp>([&](auto rs) {
-          emitCollective("reduce_scatter", rs.res());
+          builder.emitCollective("reduce_scatter", rs.res());
         })
         .Case<co4hl::AllGatherOp>([&](auto ag) {
-          emitCollective("all_gather", ag.res());
+          builder.emitCollective("all_gather", ag.res());
         })
         .Case<co4hl::ReturnOp>([&](auto ret) {
           // TODO: Set return value
@@ -261,9 +280,8 @@ void Co4LoweringPass::runOnOperation() {
         });
   }
 
+  builder.eraseSubmodules();
   algo->erase();
-  for (ModuleOp submodule : submodules)
-    submodule->erase();
 }
 
 void registerCo4LoweringPass() {
