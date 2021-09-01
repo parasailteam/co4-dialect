@@ -75,7 +75,7 @@ def Co4HL_AllReduceOp : Co4HL_Op<"all_reduce", [ NoSideEffect, SameOperandsAndRe
     let description = [{
     }];
 
-    let arguments = (ins 1DTensorOf<[AnyType]>:$operands, StrAttr:$func, I64Attr:$dstbuf);
+    let arguments = (ins 1DTensorOf<[AnyType]>:$operands, StrAttr:$func);
     let results = (outs 1DTensorOf<[AnyType]>:$res);
 }
 
@@ -84,7 +84,7 @@ def Co4HL_ReduceScatterOp : Co4HL_Op<"reduce_scatter", [ NoSideEffect, HasParent
     let description = [{
     }];
 
-    let arguments = (ins 1DTensorOf<[AnyType]>:$operands, StrAttr:$func, I64Attr:$dstbuf);
+    let arguments = (ins 1DTensorOf<[AnyType]>:$operands, StrAttr:$func);
     let results = (outs 1DTensorOf<[AnyType]>:$res);
 }
 
@@ -93,7 +93,7 @@ def Co4HL_AllGatherOp : Co4HL_Op<"all_gather", [ NoSideEffect, HasParent<"AlgoOp
     let description = [{
     }];
 
-    let arguments = (ins 1DTensorOf<[AnyType]>:$operands, I64Attr:$dstbuf);
+    let arguments = (ins 1DTensorOf<[AnyType]>:$operands);
     let results = (outs 1DTensorOf<[AnyType]>:$res);
 }
 

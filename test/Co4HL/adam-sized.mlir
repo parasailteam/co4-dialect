@@ -13,7 +13,7 @@ module {
               %const_compbeta2 : tensor<1xf32>,
               %const_invbeta2 : tensor<1xf32>,
               %const_lr : tensor<1xf32>) :
-        %g1 = "co4hl.reduce_scatter"(%g) { func="add", dstbuf=4 } : (tensor<4xf32>) -> (tensor<1xf32>)
+        %g1 = "co4hl.reduce_scatter"(%g) { func="add" } : (tensor<4xf32>) -> (tensor<1xf32>)
         // m1 = m * beta1 + g1 * compbeta1
         %tmp1 = std.mulf %m, %const_beta1                                          : tensor<1xf32>
         %tmp2 = std.mulf %g1, %const_compbeta1                                     : tensor<1xf32>
@@ -31,7 +31,7 @@ module {
         %tmp7 = std.mulf %m_, %const_lr                                            : tensor<1xf32>
         %tmp8 = math.rsqrt %v_                                                     : tensor<1xf32>
         %scatteredUpdate = std.mulf %tmp7, %tmp8   { dstbuf=11:i64, dstoff=0:i64 } : tensor<1xf32>
-        %update = "co4hl.all_gather"(%scatteredUpdate) { dstbuf=11 } : (tensor<1xf32>) -> (tensor<4xf32>)
+        %update = "co4hl.all_gather"(%scatteredUpdate) : (tensor<1xf32>) -> (tensor<4xf32>)
         // Would be nice if type system indicated data was identical across ranks at this point
         // w1 = w - update
         %w1   = std.subf %w, %update               { dstbuf=7:i64 , dstoff=0:i64 } : tensor<4xf32>

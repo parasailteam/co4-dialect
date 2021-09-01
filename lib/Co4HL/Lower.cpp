@@ -87,8 +87,7 @@ public:
     }
   }
 
-  void initNewThreadblock(int gpuid, Value v, const Twine &argname,
-                          unsigned argbuf) {
+  void initNewThreadblock(int gpuid, Value v, const Twine &argname) {
     // TODO: set return value
     builders[gpuid].create<co4ll::ReturnOp>(m.getLoc(), llvm::None);
     co4ll::TBOp prevTB =
@@ -206,10 +205,6 @@ void Co4LoweringPass::runOnOperation() {
       submodules.push_back(submodule);
   auto emitCollective = [&](StringRef collectiveName, Value oldVal) -> void {
     assert(oldVal.isa<OpResult>());
-    unsigned dstbuf = oldVal.cast<OpResult>()
-                          .getOwner()
-                          ->getAttrOfType<IntegerAttr>("dstbuf")
-                          .getInt();
     auto it = llvm::find_if(submodules, [&](ModuleOp submodule) {
       StringAttr collectiveAttr =
           submodule->getAttrOfType<StringAttr>("co4hl.collective");
@@ -235,7 +230,7 @@ void Co4LoweringPass::runOnOperation() {
       tb->setAttr("localoutputs",
                   b.getArrayAttr({b.getStringAttr(uniqueOutputName)}));
       builder.initNewThreadblock(cast<co4ll::GPUOp>(newGpu).gpuid(), oldVal,
-                                 uniqueOutputName, dstbuf);
+                                 uniqueOutputName);
       uniqueOutputID++;
     }
   };
