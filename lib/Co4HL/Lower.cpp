@@ -102,7 +102,15 @@ public:
     while (b.getNumArguments() < numBuffers)
       b.addArgument(loweredArgTy);
     builders[gpuid].setInsertionPoint(&b, b.begin());
-    BlockArgument newArg = threadblockArg(gpuid, v).cast<BlockArgument>();
+    const int chunks = v.getType().cast<ShapedType>().getNumElements();
+    assert(elemTy == v.getType().cast<ShapedType>().getElementType());
+    Block &threadblock = *builders[gpuid].getBlock();
+    // For communication between threadblocks, avoid the need for an
+    // extract_strided_slice op when we want to directly communicate
+    // a smaller number of chunks than a whole buffer
+    BlockArgument newArg =
+        threadblock.addArgument(VectorType::get({chunks}, elemTy));
+    valueMaps[gpuid][v] = newArg;
     newTB->setAttr(
         "localinputs",
         builders[gpuid].getArrayAttr({builders[gpuid].getArrayAttr(
@@ -111,40 +119,6 @@ public:
   }
 
 private:
-  void initGPUs() {
-  }
-
-  Value threadblockArg(int gpuid, Value oldVal, unsigned argbuf=UINT_MAX) {
-    const int chunks = oldVal.getType().cast<ShapedType>().getNumElements();
-    assert(elemTy == oldVal.getType().cast<ShapedType>().getElementType());
-    Block& threadblock = *builders[gpuid].getBlock();
-    Value newVal;
-    if (argbuf < numBuffers) {
-      // This arg refers to one of the buffers based on its index within the
-      // list of args
-      BlockArgument newArg = threadblock.getArgument(argbuf);
-      newVal = newArg;
-      if (chunks < maxNumChunks) {
-        size_t dim = 1;
-        SmallVector<int64_t> offsets(dim, 0);
-        SmallVector<int64_t> sizes(dim, chunks);
-        SmallVector<int64_t> strides(dim, 1);
-        newVal = builders[gpuid]
-                     .create<vector::ExtractStridedSliceOp>(
-                         oldVal.getLoc(), newArg, offsets, sizes, strides)
-                     .getResult();
-      }
-    } else {
-      // For communication between threadblocks, avoid the need for an
-      // extract_strided_slice op when we want to directly communicate
-      // a smaller number of chunks than a whole buffer
-      newVal = threadblock.addArgument(VectorType::get({chunks}, elemTy));
-    }
-
-    valueMaps[gpuid][oldVal] = newVal;
-    return newVal;
-  }
-
   // Note this template is explicitly specialized below.
   template <class T>
   T map(int gpuid, T x) {
@@ -161,9 +135,28 @@ Value LoweringBuilder::map(int gpuid, Value x) {
     assert(arg.getOwner() == &(algo.getRegion().front()));
     unsigned origArgNumber = arg.getArgNumber();
     assert(origArgNumber < algo.argbufs().size());
-    int argbuf = algo.argbufs()[origArgNumber].cast<IntegerAttr>().getInt();
-    Value newArg = threadblockArg(gpuid, x, argbuf);
-    return newArg;
+    unsigned argbuf =
+        algo.argbufs()[origArgNumber].cast<IntegerAttr>().getInt();
+    const int chunks = x.getType().cast<ShapedType>().getNumElements();
+    assert(elemTy == x.getType().cast<ShapedType>().getElementType());
+    Block& threadblock = *builders[gpuid].getBlock();
+    assert(argbuf < numBuffers);
+    // This arg refers to one of the input buffers based on its index
+    BlockArgument newArg = threadblock.getArgument(argbuf);
+    Value newVal = newArg;
+    if (chunks < maxNumChunks) {
+      size_t dim = 1;
+      SmallVector<int64_t> offsets(dim, 0);
+      SmallVector<int64_t> sizes(dim, chunks);
+      SmallVector<int64_t> strides(dim, 1);
+      newVal = builders[gpuid]
+                   .create<vector::ExtractStridedSliceOp>(
+                       x.getLoc(), newArg, offsets, sizes, strides)
+                   .getResult();
+    }
+
+    valueMaps[gpuid][x] = newVal;
+    return newVal;
   }
   llvm::errs() << "Looking for value: " << x << "\n";
   llvm_unreachable("Unable to find value in map");
