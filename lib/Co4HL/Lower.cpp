@@ -39,7 +39,7 @@ struct Co4LoweringPass final
   void runOnOperation() override;
 };
 
-class LoweringBuilder final {
+class Lowerer final {
   const int numGPUs;
   const unsigned numBuffers;
   const int maxNumChunks;
@@ -61,7 +61,7 @@ class LoweringBuilder final {
   unsigned uniqueOutputID = 0;
 
 public:
-  LoweringBuilder(int numGPUs, unsigned numBuffers, int maxNumChunks,
+  Lowerer(int numGPUs, unsigned numBuffers, int maxNumChunks,
                   ModuleOp m)
       : numGPUs(numGPUs), numBuffers(numBuffers), maxNumChunks(maxNumChunks),
         m(m), ctx(m->getContext()), elemTy(FloatType::getF32(ctx)),
@@ -179,7 +179,7 @@ private:
 };
 // Template specialization to apply the map if the 2nd argument is a Value
 template <>
-Value LoweringBuilder::map(int gpuid, Value x) {
+Value Lowerer::map(int gpuid, Value x) {
   if (valueMaps[gpuid].count(x)) {
     return valueMaps[gpuid][x];
   } else if (BlockArgument arg = x.dyn_cast<BlockArgument>()) {
@@ -240,39 +240,39 @@ void Co4LoweringPass::runOnOperation() {
     return;
   assert(maxNumChunks > 0 && "No tensor values found in algo?");
 
-  LoweringBuilder builder(algo.numgpus(), algo.numbufs(), maxNumChunks, m);
+  Lowerer lower(algo.numgpus(), algo.numbufs(), maxNumChunks, m);
 
   // Collect a "library" of implementations for collectives
   for (Operation &op : m.body().getOps())
     if (ModuleOp submodule = dyn_cast<ModuleOp>(&op))
-      builder.addSubmodule(submodule);
+      lower.addSubmodule(submodule);
 
   for (auto &op : algo.getOps()) {
     TypeSwitch<Operation *>(&op)
         .Case<MulFOp>([&](auto mulf) {
-          builder.create<MulFOp>(mulf, mulf.getOperand(0), mulf.getOperand(1));
+          lower.create<MulFOp>(mulf, mulf.getOperand(0), mulf.getOperand(1));
         })
         .Case<AddFOp>([&](auto addf) {
-          builder.create<AddFOp>(addf, addf.getOperand(0), addf.getOperand(1));
+          lower.create<AddFOp>(addf, addf.getOperand(0), addf.getOperand(1));
         })
         .Case<SubFOp>([&](auto subf) {
-          builder.create<SubFOp>(subf, subf.getOperand(0), subf.getOperand(1));
+          lower.create<SubFOp>(subf, subf.getOperand(0), subf.getOperand(1));
         })
         .Case<math::RsqrtOp>([&](auto rsqrt) {
-          builder.create<math::RsqrtOp>(rsqrt, rsqrt.getOperand());
+          lower.create<math::RsqrtOp>(rsqrt, rsqrt.getOperand());
         })
         .Case<co4hl::AllReduceOp>([&](auto ar) {
-          builder.emitCollective("all_reduce", ar.res());
+          lower.emitCollective("all_reduce", ar.res());
         })
         .Case<co4hl::ReduceScatterOp>([&](auto rs) {
-          builder.emitCollective("reduce_scatter", rs.res());
+          lower.emitCollective("reduce_scatter", rs.res());
         })
         .Case<co4hl::AllGatherOp>([&](auto ag) {
-          builder.emitCollective("all_gather", ag.res());
+          lower.emitCollective("all_gather", ag.res());
         })
         .Case<co4hl::ReturnOp>([&](auto ret) {
           // TODO: Set return value
-          builder.create<co4ll::ReturnOp>(ret, llvm::None);
+          lower.create<co4ll::ReturnOp>(ret, llvm::None);
         })
         .Default([&](Operation *op) {
           llvm::errs() << "Unexpected op: " << *op << "\n";
@@ -280,7 +280,7 @@ void Co4LoweringPass::runOnOperation() {
         });
   }
 
-  builder.eraseSubmodules();
+  lower.eraseSubmodules();
   algo->erase();
 }
 
