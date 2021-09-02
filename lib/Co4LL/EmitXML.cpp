@@ -125,8 +125,11 @@ static Operation* getUniqueDependencyFromOtherTB(Operation *op) {
   for (Value in : op->getOperands())
     if (const OpResult tbResult = in.dyn_cast<OpResult>())
       if (tbResult.getOwner()->getParentOp() != consumerTB) {
-        assert(!dep && "TODO: add support for when one operation directly uses "
-                       "multiple values produced in other TBs.");
+        assert(!dep &&
+               "TODO: emit no-ops to XML to support when an instruction "
+               "needs to wait on values produced in multiple other TBs. "
+               "For now we only support operations that have at most one"
+               "cross-TB dependency.");
         dep = tbResult;
       }
 
@@ -136,7 +139,8 @@ static Operation* getUniqueDependencyFromOtherTB(Operation *op) {
   Value producer =
       producerTB.getReturnOp().getOperand(dep.getResultNumber());
   assert(!producer.isa<BlockArgument>() &&
-         "Threadblock returns a value that it did not produce?");
+         "Threadblock returns a value that it did not produce? "
+         "TODO: Handle this case correctly.");
   return producer.cast<OpResult>().getOwner();
 }
 
