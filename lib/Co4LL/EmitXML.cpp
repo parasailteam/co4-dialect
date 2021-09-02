@@ -219,7 +219,7 @@ void StepEmitter::emitOp(Operation *inst, StringRef type) {
                << (int)llvm::any_of(
                       inst->getResults(),
                       [](OpResult out) { return isUsedByOtherTB(out); })
-               << "\" \\>\n";
+               << "\" />\n";
 }
 
 void EmitXMLPass::runOnOperation() {
@@ -234,15 +234,19 @@ void EmitXMLPass::runOnOperation() {
     unsigned tbid = 0;
     for (auto &op : gpu.getOps()) {
       co4ll::TBOp tb = cast<co4ll::TBOp>(op);
+      IntegerAttr sendAttr = tb->getAttrOfType<IntegerAttr>("send");
+      IntegerAttr recvAttr = tb->getAttrOfType<IntegerAttr>("recv");
       llvm::errs() << "    <tb id=\"" << tbid++
-                   << "\" send=\"-1\" recv=\"-1\" chan=\"0\">\n";
+                   << "\" send=\"" << (sendAttr ? sendAttr.getInt() : -1)
+                   << "\" recv=\"" << (recvAttr ? recvAttr.getInt() : -1)
+                   << "\" chan=\"0\">\n";
       StepEmitter e;
       for (Operation &inst : tb.getOps()) {
         if (!isEmittedAsXML(&inst)) continue;
         TypeSwitch<Operation *>(&inst)
-            .Case<AddFOp>([&](auto addf) { e.emitOp(addf, "addf"); })
-            .Case<SubFOp>([&](auto mulf) { e.emitOp(mulf, "subf"); })
-            .Case<MulFOp>([&](auto mulf) { e.emitOp(mulf, "mulf"); })
+            .Case<AddFOp>([&](auto addf) { e.emitOp(addf, "add"); })
+            .Case<SubFOp>([&](auto mulf) { e.emitOp(mulf, "sub"); })
+            .Case<MulFOp>([&](auto mulf) { e.emitOp(mulf, "mul"); })
             .Case<math::RsqrtOp>([&](auto rsqrt) { e.emitOp(rsqrt, "rsqrt"); })
             .Case<co4ll::SendOp>([&](auto send) { e.emitOp(send, "s"); })
             .Case<co4ll::RecvOp>([&](auto recv) { e.emitOp(recv, "r"); })

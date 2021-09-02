@@ -66,7 +66,7 @@ module {
         %g1_1 = "co4ll.recv"() : () -> (vector<1xf32>)
         %g1 = "co4ll.concat"(%g1_0, %g1_1, %g1_2, %g1_3) { dstbuf=4:i64 , dstoff=0:i64 } : (vector<1xf32>, vector<1xf32>, vector<1xf32>, vector<1xf32>) -> (vector<4xf32>)
         "co4ll.return"(%g1) : (vector<4xf32>) -> ()
-    }) : () -> (vector<4xf32>)
+    }) { send=1, recv=3 } : () -> (vector<4xf32>)
   }) { gpuid=0, numchunks=4 } : () -> ()
   "co4ll.gpu"() ({
     %g1 = "co4ll.tb"() ({
@@ -90,7 +90,7 @@ module {
         %g1_2 = "co4ll.recv"() : () -> (vector<1xf32>)
         %g1 = "co4ll.concat"(%g1_0, %g1_1, %g1_2, %g1_3) { dstbuf=4:i64 , dstoff=0:i64 } : (vector<1xf32>, vector<1xf32>, vector<1xf32>, vector<1xf32>) -> (vector<4xf32>)
         "co4ll.return"(%g1) : (vector<4xf32>) -> ()
-    }) : () -> (vector<4xf32>)
+    }) { send=2, recv=0 } : () -> (vector<4xf32>)
   }) { gpuid=1, numchunks=4 } : () -> ()
   "co4ll.gpu"() ({
     %g1 = "co4ll.tb"() ({
@@ -114,7 +114,7 @@ module {
         %g1_3 = "co4ll.recv"() : () -> (vector<1xf32>)
         %g1 = "co4ll.concat"(%g1_0, %g1_1, %g1_2, %g1_3) { dstbuf=4:i64 , dstoff=0:i64 } : (vector<1xf32>, vector<1xf32>, vector<1xf32>, vector<1xf32>) -> (vector<4xf32>)
         "co4ll.return"(%g1) : (vector<4xf32>) -> ()
-    }) : () -> (vector<4xf32>)
+    }) { send=3, recv=1 } : () -> (vector<4xf32>)
   }) { gpuid=2, numchunks=4 } : () -> ()
   "co4ll.gpu"() ({
     %g1 = "co4ll.tb"() ({
@@ -138,7 +138,7 @@ module {
         %g1_0 = "co4ll.recv"() : () -> (vector<1xf32>)
         %g1 = "co4ll.concat"(%g1_0, %g1_1, %g1_2, %g1_3) { dstbuf=4:i64 , dstoff=0:i64 } : (vector<1xf32>, vector<1xf32>, vector<1xf32>, vector<1xf32>) -> (vector<4xf32>)
         "co4ll.return"(%g1) : (vector<4xf32>) -> ()
-    }) : () -> (vector<4xf32>)
+    }) { send=0, recv=2 } : () -> (vector<4xf32>)
   }) { gpuid=3, numchunks=4 } : () -> ()
   }
 
@@ -160,7 +160,7 @@ module {
         "co4ll.rrs"(%g_1) : (vector<1xf32>) -> ()
         %g1_0 = "co4ll.rrc"(%g_0) : (vector<1xf32>) -> (vector<1xf32>)
         "co4ll.return"(%g1_0) : (vector<1xf32>) -> ()
-    }) : () -> (vector<1xf32>)
+    }) { send=1, recv=3 } : () -> (vector<1xf32>)
   }) { gpuid=0, numchunks=4 } : () -> ()
   "co4ll.gpu"() ({
     %g1_0 = "co4ll.tb"() ({
@@ -178,7 +178,7 @@ module {
         "co4ll.rrs"(%g_2) : (vector<1xf32>) -> ()
         %g1_1 = "co4ll.rrc"(%g_1) : (vector<1xf32>) -> (vector<1xf32>)
         "co4ll.return"(%g1_1) : (vector<1xf32>) -> ()
-    }) : () -> (vector<1xf32>)
+    }) { send=2, recv=0 } : () -> (vector<1xf32>)
   }) { gpuid=1, numchunks=4 } : () -> ()
   "co4ll.gpu"() ({
     %g1_2 = "co4ll.tb"() ({
@@ -196,7 +196,7 @@ module {
         "co4ll.rrs"(%g_3) : (vector<1xf32>) -> ()
         %g1_2 = "co4ll.rrc"(%g_2) : (vector<1xf32>) -> (vector<1xf32>)
         "co4ll.return"(%g1_2) : (vector<1xf32>) -> ()
-    }) : () -> (vector<1xf32>)
+    }) { send=3, recv=1 } : () -> (vector<1xf32>)
   }) { gpuid=2, numchunks=4 } : () -> ()
   "co4ll.gpu"() ({
     %g1_3 = "co4ll.tb"() ({
@@ -214,7 +214,7 @@ module {
         "co4ll.rrs"(%g_0) : (vector<1xf32>) -> ()
         %g1_3 = "co4ll.rrc"(%g_3) : (vector<1xf32>) -> (vector<1xf32>)
         "co4ll.return"(%g1_3) : (vector<1xf32>) -> ()
-    }) : () -> (vector<1xf32>)
+    }) { send=0, recv=2 } : () -> (vector<1xf32>)
   }) { gpuid=3, numchunks=4 } : () -> ()
   }
 
@@ -229,7 +229,7 @@ module {
         %g1_1 = "co4ll.recv"() : () -> (vector<1xf32>)
         %g1 = "co4ll.concat"(%g1_0, %g1_1, %g1_2, %g1_3) { dstbuf=4:i64 , dstoff=0:i64 } : (vector<1xf32>, vector<1xf32>, vector<1xf32>, vector<1xf32>) -> (vector<4xf32>)
         "co4ll.return"(%g1) : (vector<4xf32>) -> ()
-    }) : () -> (vector<4xf32>)
+    }) { send=1, recv=3 } : () -> (vector<4xf32>)
   }) { gpuid=0, numchunks=4 } : () -> ()
   "co4ll.gpu"() ({
     %g1 = "co4ll.tb"() ({
@@ -240,7 +240,7 @@ module {
         %g1_2 = "co4ll.recv"() : () -> (vector<1xf32>)
         %g1 = "co4ll.concat"(%g1_0, %g1_1, %g1_2, %g1_3) { dstbuf=4:i64 , dstoff=0:i64 } : (vector<1xf32>, vector<1xf32>, vector<1xf32>, vector<1xf32>) -> (vector<4xf32>)
         "co4ll.return"(%g1) : (vector<4xf32>) -> ()
-    }) : () -> (vector<4xf32>)
+    }) { send=2, recv=0 } : () -> (vector<4xf32>)
   }) { gpuid=1, numchunks=4 } : () -> ()
   "co4ll.gpu"() ({
     %g1 = "co4ll.tb"() ({
@@ -251,7 +251,7 @@ module {
         %g1_3 = "co4ll.recv"() : () -> (vector<1xf32>)
         %g1 = "co4ll.concat"(%g1_0, %g1_1, %g1_2, %g1_3) { dstbuf=4:i64 , dstoff=0:i64 } : (vector<1xf32>, vector<1xf32>, vector<1xf32>, vector<1xf32>) -> (vector<4xf32>)
         "co4ll.return"(%g1) : (vector<4xf32>) -> ()
-    }) : () -> (vector<4xf32>)
+    }) { send=3, recv=1 } : () -> (vector<4xf32>)
   }) { gpuid=2, numchunks=4 } : () -> ()
   "co4ll.gpu"() ({
     %g1 = "co4ll.tb"() ({
@@ -262,7 +262,7 @@ module {
         %g1_0 = "co4ll.recv"() : () -> (vector<1xf32>)
         %g1 = "co4ll.concat"(%g1_0, %g1_1, %g1_2, %g1_3) { dstbuf=4:i64 , dstoff=0:i64 } : (vector<1xf32>, vector<1xf32>, vector<1xf32>, vector<1xf32>) -> (vector<4xf32>)
         "co4ll.return"(%g1) : (vector<4xf32>) -> ()
-    }) : () -> (vector<4xf32>)
+    }) { send=0, recv=2 } : () -> (vector<4xf32>)
   }) { gpuid=3, numchunks=4 } : () -> ()
   }
     // CHECK-LABEL: co4ll.gpu
