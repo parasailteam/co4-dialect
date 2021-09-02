@@ -50,6 +50,7 @@ class Lowerer final {
   // These following parallel vectors will hold one element per rank
   SmallVector<co4ll::GPUOp, 16> gpus;
   SmallVector<mlir::OpBuilder, 16> builders;
+  SmallVector<SmallVector<Value>, 16> returnValues;
   // map from old values in high-level algo to newly generated values in
   // low-level threadblocks.
   SmallVector<DenseMap<Value, Value>, 16> valueMaps;
@@ -62,11 +63,12 @@ class Lowerer final {
   unsigned uniqueOutputID = 0;
 
 public:
-  Lowerer(int numGPUs, unsigned numBuffers, int maxNumChunks,
-                  ModuleOp m)
-      : numGPUs(numGPUs), numBuffers(numBuffers), maxNumChunks(maxNumChunks),
-        m(m), ctx(m->getContext()), elemTy(FloatType::getF32(ctx)),
-        valueMaps(numGPUs) {
+  Lowerer(co4hl::AlgoOp algo, int maxNumChunks)
+      : numGPUs(algo.numgpus()), numBuffers(algo.numbufs()),
+        maxNumChunks(maxNumChunks), m(cast<ModuleOp>(algo->getParentOp())),
+        ctx(m->getContext()), elemTy(FloatType::getF32(ctx)),
+        returnValues(numGPUs), valueMaps(numGPUs) {
+    // For each rank, create one GPU op that will contain all compute ops.
     mlir::OpBuilder b(ctx);
     b.setInsertionPointToEnd(&m.getRegion().back());
     for (int gpuid = 0; gpuid < numGPUs; gpuid++) {
@@ -74,15 +76,8 @@ public:
       gpus.push_back(gpu);
       assert(gpu.getRegion().empty());
       gpu.getRegion().emplaceBlock();
-      builders.emplace_back(gpu.getRegion());
-      // TODO: set return type
-      co4ll::TBOp tb = builders.back().create<co4ll::TBOp>(m.getLoc(), llvm::None);
-      assert(tb.getRegion().empty());
-      Block &b = tb.getRegion().emplaceBlock();
-      VectorType loweredArgTy = VectorType::get({maxNumChunks}, elemTy);
-      while (b.getNumArguments() < numBuffers)
-        b.addArgument(loweredArgTy);
-      builders.back().setInsertionPoint(&b, b.begin());
+      builders.emplace_back(ctx);
+      startComputeThreadblock(gpuid, &algo.body().front().front());
     }
   }
 
@@ -96,11 +91,12 @@ public:
   }
 
   // Emit an operation performing computation (not inter-GPU communication)
-  template <class Type, class... Args>
-  void create(Operation *OldOp, Args... args) {
+  template <class OpType, class... Args>
+  void emitCompute(Operation *OldOp, Args... args) {
+    assert(isCompute(OldOp));
     for (int gpuid = 0; gpuid < numGPUs; gpuid++) {
       Operation *NewOp =
-          builders[gpuid].create<Type>(OldOp->getLoc(), map(gpuid, args)...);
+          builders[gpuid].create<OpType>(OldOp->getLoc(), map(gpuid, args)...);
       NewOp->setAttrs(OldOp->getAttrs());
       assert(NewOp->getNumResults() == OldOp->getNumResults());
       for (unsigned i = 0; i < NewOp->getNumResults(); i++)
@@ -109,8 +105,10 @@ public:
   }
 
   // Emit a collective, which performs inter-GPU communication
-  void emitCollective(StringRef collectiveName, Value oldVal) {
-    assert(oldVal.isa<OpResult>());
+  void emitCollective(StringRef collectiveName, Operation *collective) {
+    assert(collective->getNumResults() == 1 &&
+           "TODO: Support collectives that do not produce an output on every rank");
+    OpResult oldVal = collective->getResult(0);
     const int chunks = oldVal.getType().cast<ShapedType>().getNumElements();
     assert(elemTy == oldVal.getType().cast<ShapedType>().getElementType());
 
@@ -131,27 +129,17 @@ public:
       assert(gpu.getRegion(0).hasOneBlock());
       Block &gpuBody = newGpu->getRegion(0).front();
       assert(std::distance(gpuBody.begin(), gpuBody.end()) == 1);
-      co4ll::TBOp tb = cast<co4ll::TBOp>(&gpuBody.front());
+      co4ll::TBOp collImplTb = cast<co4ll::TBOp>(&gpuBody.front());
       const int gpuid = cast<co4ll::GPUOp>(newGpu).gpuid();
 
-      OpBuilder& b = builders[gpuid];
-
       // End the thread block that previous compute ops were generated in.
-      // TODO: set return value
-      b.create<co4ll::ReturnOp>(m.getLoc(), llvm::None);
+      finishComputeThreadblock(gpuid, m.getLoc());
 
       // Start a new threadblock into which we will emit subsequent compute ops.
-      // This new threadblock goes right after the previous one.
-      Operation *prevTB = b.getBlock()->getParentOp();
-      b.setInsertionPointAfter(prevTB);
-      // TODO: set return type
-      co4ll::TBOp newTB = b.create<co4ll::TBOp>(m.getLoc(), llvm::None);
-      assert(newTB.getRegion().empty());
-      Block &newTBBlock = newTB.getRegion().emplaceBlock();
-      VectorType loweredArgTy = VectorType::get({maxNumChunks}, elemTy);
-      while (newTBBlock.getNumArguments() < numBuffers)
-        newTBBlock.addArgument(loweredArgTy);
-      b.setInsertionPoint(&newTBBlock, newTBBlock.begin());
+      co4ll::TBOp newTB =
+          startComputeThreadblock(gpuid, collective->getNextNode());
+
+      Builder b(ctx);
 
       // Because co4ll::GPUOp has trait IsolatedFromAbove, it is not legal for
       // ops nested inside one gpu to directly use SSA Values from another gpu.
@@ -161,13 +149,13 @@ public:
       // collective which will tell ThreadblockSSA what connections to make.
       std::string uniqueOutputName;
       llvm::raw_string_ostream os(uniqueOutputName);
-      os << collectiveName << "Output" << uniqueOutputID++;
+      os << collectiveName << ".output" << uniqueOutputID++;
       os.flush();
       // Apply label to collective's output
-      tb->setAttr("localoutputs",
-                  b.getArrayAttr({b.getStringAttr(uniqueOutputName)}));
+      collImplTb->setAttr("localoutputs",
+                          b.getArrayAttr({b.getStringAttr(uniqueOutputName)}));
       // Create a labeled value to use for the compute-block's input
-      // FIXME(victory): This works by assuming that the collective's result
+      // FIXME(victory): This works only assuming that the collective's result
       // is only directly used by the compute operations immediately following
       // that collective and preceeding the next collective in the algo.
       // We really should identify all the blocks that use the collective's result.
@@ -177,7 +165,7 @@ public:
       // chunks is less than a whole buffer, by just directly adding an
       // additional argument to communicate a smaller number of chunks.
       BlockArgument newArg =
-          newTBBlock.addArgument(VectorType::get({chunks}, elemTy));
+          newTB.getRegion().addArgument(VectorType::get({chunks}, elemTy));
       valueMaps[gpuid][oldVal] = newArg;
       newTB->setAttr("localinputs",
                      b.getArrayAttr({b.getArrayAttr(
@@ -186,13 +174,34 @@ public:
     }
   }
 
+  void finishCompute(Location loc) {
+    for (int gpuid = 0; gpuid < numGPUs; gpuid++) {
+      finishComputeThreadblock(gpuid, loc);
+    }
+  }
+
 private:
+  bool isCompute(const Operation *op) {
+    return isa<MulFOp>(op) || isa<AddFOp>(op) || isa<SubFOp>(op) ||
+           isa<math::RsqrtOp>(op);
+  }
+
+  /// Emit a threadblock and set this rank's builder to insert into its body,
+  /// so that subsequent compute ops will be emitted there.
+  co4ll::TBOp startComputeThreadblock(int gpuid, Operation *startOp);
+
+  co4ll::ReturnOp finishComputeThreadblock(int gpuid, Location loc);
+
   // Note this template is explicitly specialized below.
   template <class T>
   T map(int gpuid, T x) {
+    // This primary template returns its argument unchanged
     return x;
   }
 };
+
+} // end anonymous namespace
+
 // Template specialization to apply the map if the 2nd argument is a Value:
 // this takes a Value used in the high-level algo and returns the equivalent
 // Value that should be used in the emitted low-level dialect for a given gpu.
@@ -232,7 +241,53 @@ Value Lowerer::map(int gpuid, Value x) {
   llvm_unreachable("Unable to find value in map");
 }
 
-} // end anonymous namespace
+co4ll::TBOp Lowerer::startComputeThreadblock(int gpuid, Operation *startOp) {
+  OpBuilder &builder = builders[gpuid];
+  assert(returnValues[gpuid].empty() && !builder.getInsertionBlock() &&
+         "You forget to finishComputeThreadblock() on the previous block?");
+  // First, determine what what this threadblock will return.  The block will
+  // consist of all compute operations up until the next collective
+  Operation *endOp = startOp;
+  while (isCompute(endOp))
+    endOp = endOp->getNextNode();
+  for (Operation *op = startOp; isCompute(op); op = op->getNextNode())
+    for (Value result : op->getResults())
+      if (llvm::any_of(result.getUsers(), [endOp](Operation *user) {
+            return user == endOp || endOp->isBeforeInBlock(user);
+          })) {
+        returnValues[gpuid].push_back(result);
+      }
+  SmallVector<Type> ReturnTypes;
+  for (Value v : returnValues[gpuid]) {
+    unsigned chunks = v.getType().cast<ShapedType>().getNumElements();
+    ReturnTypes.push_back(VectorType::get({chunks}, elemTy));
+  }
+
+  // Okay, now we're ready to create this threadblock
+  builder.setInsertionPoint(&gpus[gpuid].getRegion().back(),
+                            gpus[gpuid].getRegion().back().end());
+  co4ll::TBOp tb = builder.create<co4ll::TBOp>(m.getLoc(), ReturnTypes);
+  assert(tb.getRegion().empty());
+  Block &newTBBlock = tb.getRegion().emplaceBlock();
+  VectorType loweredArgTy = VectorType::get({maxNumChunks}, elemTy);
+  while (newTBBlock.getNumArguments() < numBuffers)
+    newTBBlock.addArgument(loweredArgTy);
+  builder.setInsertionPoint(&newTBBlock, newTBBlock.begin());
+  return tb;
+}
+
+co4ll::ReturnOp Lowerer::finishComputeThreadblock(int gpuid, Location loc) {
+  assert(builders[gpuid].getInsertionBlock() &&
+         "Did you forget to startComputeThreadblock()?");
+  SmallVector<Value> mappedReturnVals;
+  for (Value v : returnValues[gpuid])
+    mappedReturnVals.push_back(map(gpuid, v));
+  co4ll::ReturnOp ret =
+      builders[gpuid].create<co4ll::ReturnOp>(loc, mappedReturnVals);
+  returnValues[gpuid].clear();
+  builders[gpuid].clearInsertionPoint();
+  return ret;
+}
 
 void Co4LoweringPass::runOnOperation() {
   ModuleOp m = getOperation();
@@ -258,7 +313,7 @@ void Co4LoweringPass::runOnOperation() {
     return;
   assert(maxNumChunks > 0 && "No tensor values found in algo?");
 
-  Lowerer lower(algo.numgpus(), algo.numbufs(), maxNumChunks, m);
+  Lowerer lower(algo, maxNumChunks);
 
   // Collect a "library" of implementations for collectives
   for (Operation &op : m.body().getOps())
@@ -268,32 +323,32 @@ void Co4LoweringPass::runOnOperation() {
   for (auto &op : algo.getOps()) {
     TypeSwitch<Operation *>(&op)
         .Case<MulFOp>([&](auto mulf) {
-          lower.create<MulFOp>(mulf, mulf.getOperand(0), mulf.getOperand(1));
+          lower.emitCompute<MulFOp>(mulf, mulf.getOperand(0), mulf.getOperand(1));
         })
         .Case<AddFOp>([&](auto addf) {
-          lower.create<AddFOp>(addf, addf.getOperand(0), addf.getOperand(1));
+          lower.emitCompute<AddFOp>(addf, addf.getOperand(0), addf.getOperand(1));
         })
         .Case<SubFOp>([&](auto subf) {
-          lower.create<SubFOp>(subf, subf.getOperand(0), subf.getOperand(1));
+          lower.emitCompute<SubFOp>(subf, subf.getOperand(0), subf.getOperand(1));
         })
         .Case<math::RsqrtOp>([&](auto rsqrt) {
-          lower.create<math::RsqrtOp>(rsqrt, rsqrt.getOperand());
+          lower.emitCompute<math::RsqrtOp>(rsqrt, rsqrt.getOperand());
         })
         .Case<co4hl::AllReduceOp>([&](auto ar) {
-          lower.emitCollective("all_reduce", ar.res());
+          lower.emitCollective("all_reduce", ar);
         })
         .Case<co4hl::ReduceScatterOp>([&](auto rs) {
-          lower.emitCollective("reduce_scatter", rs.res());
+          lower.emitCollective("reduce_scatter", rs);
         })
         .Case<co4hl::AllGatherOp>([&](auto ag) {
-          lower.emitCollective("all_gather", ag.res());
+          lower.emitCollective("all_gather", ag);
         })
         .Case<co4hl::ReturnOp>([&](auto ret) {
-          // TODO: Set return value
-          lower.create<co4ll::ReturnOp>(ret, llvm::None);
+          assert(&op == algo.getRegion().back().getTerminator());
+          lower.finishCompute(ret.getLoc());
         })
-        .Default([&](Operation *op) {
-          llvm::errs() << "Unexpected op: " << *op << "\n";
+        .Default([&](Operation *) {
+          llvm::errs() << "Unexpected op: " << op << "\n";
           llvm_unreachable("Unexpected op type");
         });
   }
