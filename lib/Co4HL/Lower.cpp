@@ -133,44 +133,15 @@ public:
       const int gpuid = cast<co4ll::GPUOp>(newGpu).gpuid();
 
       // End the thread block that previous compute ops were generated in.
-      finishComputeThreadblock(gpuid, m.getLoc());
+      finishComputeThreadblock(gpuid, m.getLoc(), collImplTb);
 
       // Start a new threadblock into which we will emit subsequent compute ops.
       co4ll::TBOp newTB =
           startComputeThreadblock(gpuid, collective->getNextNode());
 
-      Builder b(ctx);
-
-      // Because co4ll::GPUOp has trait IsolatedFromAbove, it is not legal for
-      // ops nested inside one gpu to directly use SSA Values from another gpu.
-      // So we'll have the LinkByGPUID pass merge gpu ops and then the
-      // ThreadblockSSA pass can link up the use of values within one rank.
-      // To that end, we generate a unique label for the output of the
-      // collective which will tell ThreadblockSSA what connections to make.
-      std::string uniqueOutputName;
-      llvm::raw_string_ostream os(uniqueOutputName);
-      os << collectiveName << ".output" << uniqueOutputID++;
-      os.flush();
-      // Apply label to collective's output
-      collImplTb->setAttr("localoutputs",
-                          b.getArrayAttr({b.getStringAttr(uniqueOutputName)}));
-      // Create a labeled value to use for the compute-block's input
-      // FIXME(victory): This works only assuming that the collective's result
-      // is only directly used by the compute operations immediately following
-      // that collective and preceeding the next collective in the algo.
-      // We really should identify all the blocks that use the collective's result.
-      // As a minor optimization, for communicating the result of a collective
-      // between threadblocks, we can avoid the need to refer to a whole buffer
-      // and have the user use an extract_strided_slice op if the number of
-      // chunks is less than a whole buffer, by just directly adding an
-      // additional argument to communicate a smaller number of chunks.
       BlockArgument newArg =
           newTB.getRegion().addArgument(VectorType::get({chunks}, elemTy));
-      valueMaps[gpuid][oldVal] = newArg;
-      newTB->setAttr("localinputs",
-                     b.getArrayAttr({b.getArrayAttr(
-                         {b.getStringAttr(uniqueOutputName),
-                          b.getI64IntegerAttr(newArg.getArgNumber())})}));
+      connectOutputToNextThreadblocks(gpuid, collImplTb, oldVal, newTB, newArg);
     }
   }
 
@@ -190,7 +161,12 @@ private:
   /// so that subsequent compute ops will be emitted there.
   co4ll::TBOp startComputeThreadblock(int gpuid, Operation *startOp);
 
-  co4ll::ReturnOp finishComputeThreadblock(int gpuid, Location loc);
+  co4ll::ReturnOp finishComputeThreadblock(int gpuid, Location loc,
+                                           co4ll::TBOp collImpl=co4ll::TBOp());
+
+  void connectOutputToNextThreadblocks(int gpuid, co4ll::TBOp producerTB,
+                                       Value oldVal, co4ll::TBOp newTB,
+                                       BlockArgument newArg);
 
   // Note this template is explicitly specialized below.
   template <class T>
@@ -276,7 +252,7 @@ co4ll::TBOp Lowerer::startComputeThreadblock(int gpuid, Operation *startOp) {
   return tb;
 }
 
-co4ll::ReturnOp Lowerer::finishComputeThreadblock(int gpuid, Location loc) {
+co4ll::ReturnOp Lowerer::finishComputeThreadblock(int gpuid, Location loc, co4ll::TBOp collImpl) {
   assert(builders[gpuid].getInsertionBlock() &&
          "Did you forget to startComputeThreadblock()?");
   SmallVector<Value> mappedReturnVals;
@@ -284,9 +260,47 @@ co4ll::ReturnOp Lowerer::finishComputeThreadblock(int gpuid, Location loc) {
     mappedReturnVals.push_back(map(gpuid, v));
   co4ll::ReturnOp ret =
       builders[gpuid].create<co4ll::ReturnOp>(loc, mappedReturnVals);
+  if (collImpl)
+    for (Value v : returnValues[gpuid]) {
+      assert(collImpl.getRegion().getNumArguments() == 1);
+      BlockArgument collArg = collImpl.getRegion().getArgument(0);
+      connectOutputToNextThreadblocks(
+          gpuid, cast<co4ll::TBOp>(ret->getParentOp()), v, collImpl, collArg);
+    }
   returnValues[gpuid].clear();
   builders[gpuid].clearInsertionPoint();
+
+
   return ret;
+}
+
+void Lowerer::connectOutputToNextThreadblocks(int gpuid, co4ll::TBOp producerTB,
+                                              Value oldVal, co4ll::TBOp newTB,
+                                              BlockArgument newArg) {
+  Builder b(ctx);
+
+  // Because co4ll::GPUOp has trait IsolatedFromAbove, it is not legal for
+  // ops nested inside one gpu to directly use SSA Values from another gpu.
+  // So we'll have the LinkByGPUID pass merge gpu ops and then the
+  // ThreadblockSSA pass can link up the use of values within one rank.
+  // To that end, we generate a unique label for the produced output
+  // which will tell ThreadblockSSA what connections to make.
+  std::string uniqueOutputName;
+  llvm::raw_string_ostream os(uniqueOutputName);
+  os << "threadblock_output_" << uniqueOutputID++;
+  os.flush();
+  // Apply label to collective's output
+  producerTB->setAttr("localoutputs",
+                      b.getArrayAttr({b.getStringAttr(uniqueOutputName)}));
+  // Create a labeled value to use for the new block's input
+  // FIXME(victory): This works only assuming that the produced result is only
+  //     directly used by newTB (the block immediately following the producer).
+  //     We ought to identify all the blocks that use the collective's result.
+  valueMaps[gpuid][oldVal] = newArg;
+  newTB->setAttr("localinputs",
+                 b.getArrayAttr({b.getArrayAttr(
+                     {b.getStringAttr(uniqueOutputName),
+                      b.getI64IntegerAttr(newArg.getArgNumber())})}));
 }
 
 void Co4LoweringPass::runOnOperation() {

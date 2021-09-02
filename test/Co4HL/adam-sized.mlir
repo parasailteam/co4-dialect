@@ -222,9 +222,7 @@ module {
   module attributes{co4hl.collective="all_gather"} {
   "co4ll.gpu"() ({
     %g1 = "co4ll.tb"() ({
-      ^bb0 (  %a0 : vector<4xf32> ) :
-        %g1_0 = vector.extract_strided_slice %a0
-            { offsets = [0], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+      ^bb0 (  %g1_0 : vector<1xf32> ) :
         "co4ll.send"(%g1_0) : (vector<1xf32>) -> ()
         %g1_3 = "co4ll.rcs"() : () -> (vector<1xf32>)
         %g1_2 = "co4ll.rcs"() : () -> (vector<1xf32>)
@@ -235,9 +233,7 @@ module {
   }) { gpuid=0 } : () -> ()
   "co4ll.gpu"() ({
     %g1 = "co4ll.tb"() ({
-      ^bb0 (  %a0 : vector<4xf32> ) :
-        %g1_1 = vector.extract_strided_slice %a0
-            { offsets = [1], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+      ^bb0 (  %g1_1 : vector<1xf32> ) :
         "co4ll.send"(%g1_1) : (vector<1xf32>) -> ()
         %g1_0 = "co4ll.rcs"() : () -> (vector<1xf32>)
         %g1_3 = "co4ll.rcs"() : () -> (vector<1xf32>)
@@ -248,9 +244,7 @@ module {
   }) { gpuid=1 } : () -> ()
   "co4ll.gpu"() ({
     %g1 = "co4ll.tb"() ({
-      ^bb0 (  %a0 : vector<4xf32> ) :
-        %g1_2 = vector.extract_strided_slice %a0
-            { offsets = [2], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+      ^bb0 (  %g1_2 : vector<1xf32> ) :
         "co4ll.send"(%g1_2) : (vector<1xf32>) -> ()
         %g1_1 = "co4ll.rcs"() : () -> (vector<1xf32>)
         %g1_0 = "co4ll.rcs"() : () -> (vector<1xf32>)
@@ -261,9 +255,7 @@ module {
   }) { gpuid=2 } : () -> ()
   "co4ll.gpu"() ({
     %g1 = "co4ll.tb"() ({
-      ^bb0 (  %a0 : vector<4xf32> ) :
-        %g1_3 = vector.extract_strided_slice %a0
-            { offsets = [3], sizes = [1], strides = [1] } : vector<4xf32> to vector<1xf32>
+      ^bb0 (  %g1_3 : vector<1xf32> ) :
         "co4ll.send"(%g1_3) : (vector<1xf32>) -> ()
         %g1_2 = "co4ll.rcs"() : () -> (vector<1xf32>)
         %g1_1 = "co4ll.rcs"() : () -> (vector<1xf32>)

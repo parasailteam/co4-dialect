@@ -62,7 +62,7 @@ void ThreadblockSSAPass::runOnOperation() {
       assert(localValues.count(inputName));
       Value otherTBResult = localValues[inputName];
       BlockArgument inputArg = tb.getRegion().getArgument(argNum);
-      assert(!inputArg.use_empty());
+      //assert(!inputArg.use_empty());
       inputArg.replaceAllUsesWith(otherTBResult);
       assert(inputArg.use_empty());
     }
