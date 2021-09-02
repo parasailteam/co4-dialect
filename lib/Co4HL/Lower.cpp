@@ -50,7 +50,8 @@ class Lowerer final {
   // These following parallel vectors will hold one element per rank
   SmallVector<co4ll::GPUOp, 16> gpus;
   SmallVector<mlir::OpBuilder, 16> builders;
-  // map from old values in algo to new values in generated threadblocks.
+  // map from old values in high-level algo to newly generated values in
+  // low-level threadblocks.
   SmallVector<DenseMap<Value, Value>, 16> valueMaps;
 
   // A collection of possible implementations of collectives.
@@ -110,6 +111,10 @@ public:
   // Emit a collective, which performs inter-GPU communication
   void emitCollective(StringRef collectiveName, Value oldVal) {
     assert(oldVal.isa<OpResult>());
+    const int chunks = oldVal.getType().cast<ShapedType>().getNumElements();
+    assert(elemTy == oldVal.getType().cast<ShapedType>().getElementType());
+
+    // Find the implementation of the collective from the "library" of submodules
     auto it = llvm::find_if(submodules, [&](ModuleOp submodule) {
       StringAttr collectiveAttr =
           submodule->getAttrOfType<StringAttr>("co4hl.collective");
@@ -120,6 +125,7 @@ public:
            "Unable to find collective implementation");
     ModuleOp submodule = *it;
     for (Operation &gpu : submodule.body().getOps()) {
+      // Create a copy of the implementation.
       Operation *newGpu = gpu.clone();
       m.body().back().getOperations().insert(m.body().back().end(), newGpu);
       assert(gpu.getRegion(0).hasOneBlock());
@@ -127,47 +133,57 @@ public:
       assert(std::distance(gpuBody.begin(), gpuBody.end()) == 1);
       co4ll::TBOp tb = cast<co4ll::TBOp>(&gpuBody.front());
       const int gpuid = cast<co4ll::GPUOp>(newGpu).gpuid();
-      Builder& b = builders[gpuid];
+
+      OpBuilder& b = builders[gpuid];
+
+      // End the thread block that previous compute ops were generated in.
+      // TODO: set return value
+      b.create<co4ll::ReturnOp>(m.getLoc(), llvm::None);
+
+      // Start a new threadblock into which we will emit subsequent compute ops.
+      // This new threadblock goes right after the previous one.
+      Operation *prevTB = b.getBlock()->getParentOp();
+      b.setInsertionPointAfter(prevTB);
+      // TODO: set return type
+      co4ll::TBOp newTB = b.create<co4ll::TBOp>(m.getLoc(), llvm::None);
+      assert(newTB.getRegion().empty());
+      Block &newTBBlock = newTB.getRegion().emplaceBlock();
+      VectorType loweredArgTy = VectorType::get({maxNumChunks}, elemTy);
+      while (newTBBlock.getNumArguments() < numBuffers)
+        newTBBlock.addArgument(loweredArgTy);
+      b.setInsertionPoint(&newTBBlock, newTBBlock.begin());
+
+      // Because co4ll::GPUOp has trait IsolatedFromAbove, it is not legal for
+      // ops nested inside one gpu to directly use SSA Values from another gpu.
+      // So we'll have the LinkByGPUID pass merge gpu ops and then the
+      // ThreadblockSSA pass can link up the use of values within one rank.
+      // To that end, we generate a unique label for the output of the
+      // collective which will tell ThreadblockSSA what connections to make.
       std::string uniqueOutputName;
       llvm::raw_string_ostream os(uniqueOutputName);
-      os << collectiveName << "Output" << uniqueOutputID;
+      os << collectiveName << "Output" << uniqueOutputID++;
       os.flush();
+      // Apply label to collective's output
       tb->setAttr("localoutputs",
                   b.getArrayAttr({b.getStringAttr(uniqueOutputName)}));
-      initNewThreadblock(gpuid, oldVal, uniqueOutputName);
-      uniqueOutputID++;
+      // Create a labeled value to use for the compute-block's input
+      // FIXME(victory): This works by assuming that the collective's result
+      // is only directly used by the compute operations immediately following
+      // that collective and preceeding the next collective in the algo.
+      // We really should identify all the blocks that use the collective's result.
+      // As a minor optimization, for communicating the result of a collective
+      // between threadblocks, we can avoid the need to refer to a whole buffer
+      // and have the user use an extract_strided_slice op if the number of
+      // chunks is less than a whole buffer, by just directly adding an
+      // additional argument to communicate a smaller number of chunks.
+      BlockArgument newArg =
+          newTBBlock.addArgument(VectorType::get({chunks}, elemTy));
+      valueMaps[gpuid][oldVal] = newArg;
+      newTB->setAttr("localinputs",
+                     b.getArrayAttr({b.getArrayAttr(
+                         {b.getStringAttr(uniqueOutputName),
+                          b.getI64IntegerAttr(newArg.getArgNumber())})}));
     }
-  }
-
-  void initNewThreadblock(int gpuid, Value v, const Twine &argname) {
-    // TODO: set return value
-    builders[gpuid].create<co4ll::ReturnOp>(m.getLoc(), llvm::None);
-    co4ll::TBOp prevTB =
-        cast<co4ll::TBOp>(builders[gpuid].getBlock()->getParentOp());
-    builders[gpuid].setInsertionPointAfter(prevTB);
-    // TODO: set return type
-    co4ll::TBOp newTB =
-        builders[gpuid].create<co4ll::TBOp>(m.getLoc(), llvm::None);
-    assert(newTB.getRegion().empty());
-    Block &newTBBlock = newTB.getRegion().emplaceBlock();
-    VectorType loweredArgTy = VectorType::get({maxNumChunks}, elemTy);
-    while (newTBBlock.getNumArguments() < numBuffers)
-      newTBBlock.addArgument(loweredArgTy);
-    builders[gpuid].setInsertionPoint(&newTBBlock, newTBBlock.begin());
-    const int chunks = v.getType().cast<ShapedType>().getNumElements();
-    assert(elemTy == v.getType().cast<ShapedType>().getElementType());
-    Block &threadblock = *builders[gpuid].getBlock();
-    // For communication between threadblocks, avoid the need for an
-    // extract_strided_slice op when we want to directly communicate
-    // a smaller number of chunks than a whole buffer
-    BlockArgument newArg =
-        threadblock.addArgument(VectorType::get({chunks}, elemTy));
-    valueMaps[gpuid][v] = newArg;
-    newTB->setAttr(
-        "localinputs",
-        builders[gpuid].getArrayAttr({builders[gpuid].getArrayAttr(
-            {builders[gpuid].getStringAttr(argname),
-             builders[gpuid].getI64IntegerAttr(newArg.getArgNumber())})}));
   }
 
 private:
@@ -177,7 +193,9 @@ private:
     return x;
   }
 };
-// Template specialization to apply the map if the 2nd argument is a Value
+// Template specialization to apply the map if the 2nd argument is a Value:
+// this takes a Value used in the high-level algo and returns the equivalent
+// Value that should be used in the emitted low-level dialect for a given gpu.
 template <>
 Value Lowerer::map(int gpuid, Value x) {
   if (valueMaps[gpuid].count(x)) {
