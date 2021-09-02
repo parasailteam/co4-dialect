@@ -107,7 +107,7 @@ public:
   // Emit a collective, which performs inter-GPU communication
   void emitCollective(StringRef collectiveName, Operation *collective) {
     assert(collective->getNumResults() == 1 &&
-           "TODO: Support collectives that do not produce an output on every rank");
+           "TODO: Support collectives not producing output on every rank?");
     OpResult oldVal = collective->getResult(0);
     const int chunks = oldVal.getType().cast<ShapedType>().getNumElements();
     assert(elemTy == oldVal.getType().cast<ShapedType>().getElementType());
@@ -260,6 +260,12 @@ co4ll::ReturnOp Lowerer::finishComputeThreadblock(int gpuid, Location loc, co4ll
     mappedReturnVals.push_back(map(gpuid, v));
   co4ll::ReturnOp ret =
       builders[gpuid].create<co4ll::ReturnOp>(loc, mappedReturnVals);
+  // Hook up output from this compute block to the input of the collective.
+  // FIXME(victory): This assumes that the input to the collective is either an
+  // input to the whole algo or produced in this compute block immediately
+  // preceeding the collective.  This code won't work if a result from some
+  // local compute needs to be fed to, say, multiple collectives, or a
+  // collective that occurs much later in the algo.
   if (collImpl)
     for (Value v : returnValues[gpuid]) {
       assert(collImpl.getRegion().getNumArguments() == 1);
@@ -295,7 +301,7 @@ void Lowerer::connectOutputToNextThreadblocks(int gpuid, co4ll::TBOp producerTB,
   // Create a labeled value to use for the new block's input
   // FIXME(victory): This works only assuming that the produced result is only
   //     directly used by newTB (the block immediately following the producer).
-  //     We ought to identify all the blocks that use the collective's result.
+  //     We ought to identify all blocks that use the produced local output.
   valueMaps[gpuid][oldVal] = newArg;
   newTB->setAttr("localinputs",
                  b.getArrayAttr({b.getArrayAttr(
