@@ -49,7 +49,7 @@ def GPUOp : Co4LL_Op<"gpu", [ HasParent<"ModuleOp">,
     TODO: Write a longer description here.
   }];
 
-  let arguments = (ins I64Attr:$gpuid);
+  let arguments = (ins I64Attr:$gpuid, I64Attr:$numchunks);
   let regions = (region SizedRegion<1>:$body);
 }
 

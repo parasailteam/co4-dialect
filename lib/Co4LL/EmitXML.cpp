@@ -166,7 +166,7 @@ static int getStepWithinTB(Operation *op) {
 }
 
 void StepEmitter::emitOp(Operation *inst, StringRef type) {
-  llvm::errs() << "   <step s=\"" << stepcount++ << "\" "
+  llvm::errs() << "      <step s=\"" << stepcount++ << "\" "
                << "type=\"" << type << "\" ";
   unsigned numSources = inst->getNumOperands();
   int srcbuf, srcoff;
@@ -228,14 +228,13 @@ void EmitXMLPass::runOnOperation() {
   llvm::errs() << "<algo name=\"Co4LL\" nchunksperloop=\"1\" nchannels=\"1\" proto=\"Simple\">\n";
   for (auto &op : m.getOps()) {
     co4ll::GPUOp gpu = cast<co4ll::GPUOp>(op);
-    IntegerAttr gpuid = gpu->getAttrOfType<IntegerAttr>("gpuid");
-    assert(gpuid && "gpuid attr missing");
-    llvm::errs() << " <gpu id=\"" << gpuid.getInt()
-                 << "\" i_chunks=\"1\" o_chunks=\"1\" s_chunks=\"1\" >\n";
+    llvm::errs() << "  <gpu id=\"" << gpu.gpuid() << "\" i_chunks=\""
+                 << gpu.numchunks() << "\" o_chunks=\"" << gpu.numchunks()
+                 << "\" s_chunks=\"" << gpu.numchunks() << "\" >\n";
     unsigned tbid = 0;
     for (auto &op : gpu.getOps()) {
       co4ll::TBOp tb = cast<co4ll::TBOp>(op);
-      llvm::errs() << "  <tb id=\"" << tbid++
+      llvm::errs() << "    <tb id=\"" << tbid++
                    << "\" send=\"-1\" recv=\"-1\" chan=\"0\">\n";
       StepEmitter e;
       for (Operation &inst : tb.getOps()) {
@@ -257,9 +256,9 @@ void EmitXMLPass::runOnOperation() {
               llvm::errs() << "Unexpected instruction type:\n  " << *op << "\n";
             });
       }
-      llvm::errs() << "  </tb>\n";
+      llvm::errs() << "    </tb>\n";
     }
-    llvm::errs() << " </gpu>\n";
+    llvm::errs() << "  </gpu>\n";
   }
   llvm::errs() << "</algo>\n";
 }

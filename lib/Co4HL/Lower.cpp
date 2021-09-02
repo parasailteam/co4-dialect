@@ -72,7 +72,8 @@ public:
     mlir::OpBuilder b(ctx);
     b.setInsertionPointToEnd(&m.getRegion().back());
     for (int gpuid = 0; gpuid < numGPUs; gpuid++) {
-      co4ll::GPUOp gpu = b.create<co4ll::GPUOp>(m.getLoc(), gpuid);
+      co4ll::GPUOp gpu =
+          b.create<co4ll::GPUOp>(m.getLoc(), gpuid, maxNumChunks);
       gpus.push_back(gpu);
       assert(gpu.getRegion().empty());
       gpu.getRegion().emplaceBlock();

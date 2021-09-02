@@ -56,7 +56,7 @@ module {
         %g1 = "co4ll.concat"(%g1_0, %g1_1, %g1_2, %g1_3) { dstbuf=4:i64 , dstoff=0:i64 } : (vector<1xf32>, vector<1xf32>, vector<1xf32>, vector<1xf32>) -> (vector<4xf32>)
         "co4ll.return"(%g1) : (vector<4xf32>) -> ()
     }) { localoutputs=["g1"] } : () -> (vector<4xf32>)
-  }) { gpuid=0 } : () -> ()
+  }) { gpuid=0, numchunks=4 } : () -> ()
   "co4ll.gpu"() ({
     // CHECK-LABEL: co4ll.tb
     %w1 = "co4ll.tb"() ({
@@ -113,5 +113,5 @@ module {
         %w1   = std.subf %a1, %update              { dstbuf=7:i64 , dstoff=0:i64 } : vector<4xf32>
         "co4ll.return"(%w1) : (vector<4xf32>) -> ()
     }) { localinputs=[["g1",4]] } : () -> (vector<4xf32>)
-  }) { gpuid=0 } : () -> ()
+  }) { gpuid=0, numchunks=4 } : () -> ()
 }

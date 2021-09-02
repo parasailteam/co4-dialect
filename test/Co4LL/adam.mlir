@@ -75,5 +75,5 @@ module {
         %w1   = std.subf %a1, %update              { dstbuf=7:i64 , dstoff=0:i64 } : vector<4xf32>
         "co4ll.return"(%w1) : (vector<4xf32>) -> ()
     }) : () -> (vector<4xf32>)
-  }) { gpuid=0 } : () -> ()
+  }) { gpuid=0, numchunks=4 } : () -> ()
 }
