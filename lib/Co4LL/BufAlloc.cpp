@@ -119,14 +119,24 @@ bool BufAlloc::pickDst(Operation *op) {
 
 void BufAllocPass::runOnOperation() {
   co4ll::GPUOp gpu = getOperation();
+  BufAlloc alloc(32/*TODO: replace hard-coded constant with an attribute somewhere?*/);
   for (auto &op : gpu.getOps()) {
     co4ll::TBOp tb = cast<co4ll::TBOp>(op);
     Region &r = tb.getRegion();
     Block &b = r.front();
-    BufAlloc alloc{r.getNumArguments()};
     for (BlockArgument &arg : r.getArguments()) {
       alloc.setUsed(arg.getArgNumber(), !arg.use_empty());
     }
+    for (Operation &inst : b) {
+      IntegerAttr dstbuf = inst.getAttrOfType<IntegerAttr>("dstbuf");
+      if (dstbuf)
+        alloc.setUsed(dstbuf.getInt(), true);
+    }
+  }
+  for (auto &op : gpu.getOps()) {
+    co4ll::TBOp tb = cast<co4ll::TBOp>(op);
+    Region &r = tb.getRegion();
+    Block &b = r.front();
     bool changed = false;
     do {
       changed = false;
