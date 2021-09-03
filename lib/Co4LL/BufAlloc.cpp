@@ -118,13 +118,16 @@ bool BufAlloc::pickDst(Operation *op) {
 }
 
 void BufAllocPass::runOnOperation() {
+  // Since the threadblocks run concurrently, buffers used in one threadblock
+  // cannot be safely reused in another without a careful analysis of
+  // synchronization. For now, conservatively mark all buffers already used
+  // and avoid reusing them unless we're absolutely sure it's safe.
   co4ll::GPUOp gpu = getOperation();
   BufAlloc alloc(32/*TODO: replace hard-coded constant with an attribute somewhere?*/);
   for (auto &op : gpu.getOps()) {
     co4ll::TBOp tb = cast<co4ll::TBOp>(op);
-    Region &r = tb.getRegion();
-    Block &b = r.front();
-    for (BlockArgument &arg : r.getArguments()) {
+    Block &b = tb.getRegion().front();
+    for (BlockArgument &arg : b.getArguments()) {
       alloc.setUsed(arg.getArgNumber(), !arg.use_empty());
     }
     for (Operation &inst : b) {
@@ -133,10 +136,11 @@ void BufAllocPass::runOnOperation() {
         alloc.setUsed(dstbuf.getInt(), true);
     }
   }
+
+  // Now assign destination buffers to all remaining operations that need them.
   for (auto &op : gpu.getOps()) {
     co4ll::TBOp tb = cast<co4ll::TBOp>(op);
-    Region &r = tb.getRegion();
-    Block &b = r.front();
+    Block &b = tb.getRegion().front();
     bool changed = false;
     do {
       changed = false;
